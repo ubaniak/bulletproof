@@ -1,6 +1,6 @@
 # bulletproof
 
-A Claude Code skill encoding a domain-driven backend architecture pattern: clear separation between entities, storage adapters, third-party gateways, usecase/service logic, and transport handlers.
+A Claude Code skill encoding a domain-driven backend architecture pattern: clear separation between entities, storage adapters, third-party gateways, useCase/service logic, and transport handlers.
 
 ## What it does
 
@@ -8,10 +8,10 @@ When this skill is installed, Claude Code will use the bulletproof layout to:
 
 - Scaffold new domains with the correct layer structure
 - Review existing code against the layering/import rules
-- Flag DTO leaks, layer violations, and god-usecases
+- Flag DTO leaks, layer violations, and god-useCases
 - Wire `setup` composition roots correctly
 
-The skill auto-triggers when you mention "bulletproof", "domain layout", "usecase", "gateway", "storage adapter", or ask how to structure a service.
+The skill auto-triggers when you mention "bulletproof", "domain layout", "useCase", "gateway", "storage adapter", or ask how to structure a service.
 
 ## Install
 
@@ -54,7 +54,7 @@ In any Claude Code session, ask things like:
     gateway                       # interface
     gateway/<impl>                # adapter
     gateway/<impl>_dto            # translation
-    usecase                       # business logic
+    useCase                       # business logic
     transport                     # interface
     transport/<impl>              # handler
     transport/<impl>_dto          # translation
@@ -63,6 +63,6 @@ In any Claude Code session, ask things like:
 
 Every adapter `<impl>` pairs with a sibling `<impl>_dto`.
 
-**Hard rule**: domains may only import another domain's `entities` and `usecase`.
+**Hard rule**: domains may only import another domain's `entities` and `useCase`.
 
 See [`SKILL.md`](./SKILL.md) for full rules, scaffold checklist, review checklist, and anti-patterns.
