@@ -1,11 +1,11 @@
 ---
 name: bulletproof
-description: Bulletproof domain-driven architecture pattern. Use when scaffolding a new domain, organizing backend services, reviewing layering/import boundaries, or when user mentions "bulletproof", "domain layout", "useCase", "gateway", "storage adapter", or asks how to structure a service with entities/storage/gateway/useCase/transport layers.
+description: Bulletproof domain-driven architecture pattern with enforced SOLID design. Use when scaffolding a new domain, organizing backend services, reviewing layering/import boundaries, checking SOLID compliance, or when user mentions "bulletproof", "domain layout", "useCase", "gateway", "storage adapter", "SOLID", "SRP", "DIP", "open/closed", or asks how to structure a service with entities/storage/gateway/useCase/transport layers.
 ---
 
 # Bulletproof Architecture
 
-A domain-driven layout for backend services. Each domain is a self-contained unit with clear inbound/outbound boundaries.
+A domain-driven layout for backend services. Each domain is a self-contained unit with clear inbound/outbound boundaries. **The layout structurally enforces SOLID** — see [SOLID enforcement](#solid-enforcement) below.
 
 ## Layout
 
@@ -242,6 +242,95 @@ Nest `X/Y/` when:
 - External callers never reference `Y` directly
 
 Otherwise, keep flat.
+
+## SOLID enforcement
+
+Bulletproof is opinionated SOLID. Each principle maps to a structural rule the layout already enforces.
+
+### S — Single Responsibility
+
+Each layer has one reason to change:
+
+- **entities** change when domain invariants change
+- **storage** changes when persistence engine/schema changes
+- **gateway** changes when third-party contract changes
+- **useCase** changes when business rules change
+- **transport** changes when wire protocol changes
+- **setup** changes when wiring changes
+
+**Violation signs:**
+- useCase handling both billing and notifications → split into two domains or coordinator
+- storage adapter formatting JSON for HTTP response → that belongs in transport
+- entity opening DB connections → entity should be pure data + invariants
+- one file holding useCase + storage + transport → split into layers
+
+### O — Open / Closed
+
+Add a new adapter, never modify existing ones:
+
+- New DB? Add `storage/<newengine>/` + `<newengine>_dto/`. Don't edit `mysql/`.
+- New protocol? Add `transport/<newproto>/` + `<newproto>_dto/`. Don't edit `rest/`.
+- New external provider? Add `gateway/<newprovider>/` + `<newprovider>_dto/`. Don't edit `api/`.
+
+useCase depends on the interface, so adding adapters never touches business logic.
+
+**Violation signs:**
+- if/else in useCase switching on `db.kind == "mysql"`
+- shared mutable adapter base class everyone extends
+- changing storage interface every time a new adapter joins (interface should be stable; adapters conform)
+
+### L — Liskov Substitution
+
+Every adapter must be a true substitute for its interface:
+
+- `storage/mysql` and `storage/pg` return identical errors for identical inputs
+- `gateway/stripe` and `gateway/braintree` cannot have one throw on missing field and the other silently default
+- Adapter-specific behavior (timeouts, retries that respect contract) is fine; differing semantics is not
+
+**Violation signs:**
+- useCase tests pass with one storage adapter and fail with another (without a real bug in the adapter)
+- documentation says "only use `mysql` adapter for X" — that's a leaked contract; fix the interface
+- adapter throws an error type not declared in the interface
+
+### I — Interface Segregation
+
+Keep layer interfaces small and role-specific. One fat `Repository` interface is an anti-pattern.
+
+- Split storage by aggregate: `UserStorage`, `OrderStorage`, not `Storage`
+- Split gateway by capability: `PaymentGateway`, `RefundGateway`, not `StripeClient`
+- Split transport by handler group; don't make a god-handler interface
+
+useCase should depend only on the methods it calls. If a useCase needs `GetByID` only, don't force it to know about `BulkDelete`.
+
+**Violation signs:**
+- useCase imports an interface with 20 methods and uses 2
+- mock objects with stubs for unused methods
+- adding a method to an interface breaks unrelated useCases
+
+### D — Dependency Inversion
+
+The whole layout exists to enforce this. High-level (useCase) depends on abstractions (interfaces declared in the domain). Low-level (mysql, stripe, rest) implements those abstractions.
+
+- Interfaces live with the **consumer** (the domain), not with the adapter
+- Adapters import the domain to implement the interface
+- useCase never imports `storage/mysql` — only `storage` (interface)
+- `setup` is the only place where concrete and abstract meet
+
+**Violation signs:**
+- useCase imports `database/sql` or `net/http`
+- domain interface lives in the adapter package
+- useCase constructor takes a `*sql.DB`
+- circular import between domain and adapter (interface is on the wrong side)
+
+### SOLID review checklist
+
+When reviewing, flag:
+
+- **SRP**: layer doing two jobs, file doing two layers' work
+- **OCP**: type switches on adapter kind, modifying existing adapter to add a feature
+- **LSP**: adapter with semantics that differ from the interface contract
+- **ISP**: interfaces with methods no caller uses; fat repository
+- **DIP**: useCase importing concrete adapter, interface declared in adapter package, concrete types in useCase constructor signatures
 
 ## Quick reference
 

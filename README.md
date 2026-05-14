@@ -10,6 +10,7 @@ When this skill is installed, Claude Code will use the bulletproof layout to:
 - Review existing code against the layering/import rules
 - Flag DTO leaks, layer violations, and god-useCases
 - Wire `setup` composition roots correctly
+- Enforce SOLID — each principle maps to a structural rule in the layout
 
 The skill auto-triggers when you mention "bulletproof", "domain layout", "useCase", "gateway", "storage adapter", or ask how to structure a service.
 
