@@ -18,21 +18,26 @@ A domain-driven layout for backend services. Each domain is a self-contained uni
         mysql                 # adapter
         mysql_dto             # row <-> entity translation
         pg                    # adapter
+        pg_dto                # row <-> entity translation
         mongodb               # adapter
+        mongodb_dto           # doc <-> entity translation
     gateway                   # interface (port)
     gateway/
-        api_dto               # external api wire types
         api                   # api adapter
-        rest_dto              # external rest wire types
+        api_dto               # external api wire types
         rest                  # rest adapter
+        rest_dto              # external rest wire types
     usecase | service         # interface + implementation
     transport                 # interface (port)
     transport/
-        rest_dto              # inbound wire types
         rest                  # rest handler
+        rest_dto              # inbound rest wire types
         grpc                  # grpc handler
+        grpc_dto              # inbound grpc wire types
     setup                     # constructs and wires usecase + transport
 ```
+
+**DTO naming**: every adapter `<impl>` has a sibling `<impl>_dto` for translation. Pattern is uniform across `storage/`, `gateway/`, `transport/`.
 
 ## Rules (hard)
 
@@ -63,12 +68,12 @@ When creating a new domain `X`:
 
 1. `X/entities/` — define core types. No imports from other layers.
 2. `X/storage.go` (or equivalent) — declare interface the usecase needs.
-3. `X/storage/<engine>/` — implement. Add `<engine>_dto` for row mapping.
+3. `X/storage/<impl>/` — implement. Add sibling `X/storage/<impl>_dto/` for row mapping.
 4. `X/gateway.go` — declare interface for each external dependency.
-5. `X/gateway/<provider>/` — implement. Add `<provider>_dto` for wire types.
+5. `X/gateway/<impl>/` — implement. Add sibling `X/gateway/<impl>_dto/` for wire types.
 6. `X/usecase.go` — declare interface + struct. Constructor takes storage + gateway interfaces.
 7. `X/transport.go` — declare transport interface.
-8. `X/transport/<proto>/` — implement handler. Take usecase interface in constructor.
+8. `X/transport/<impl>/` — implement handler. Add sibling `X/transport/<impl>_dto/` for inbound wire types. Take usecase interface in constructor.
 9. `X/setup.go` — build concrete graph, return `(Usecase, Transport)`.
 
 ## Review checklist

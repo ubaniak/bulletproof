@@ -48,15 +48,20 @@ In any Claude Code session, ask things like:
 ```
 <domain>/
     entities/
-    storage           # interface
-    storage/<engine>  # adapter + dto
-    gateway           # interface
-    gateway/<api>     # adapter + dto
-    usecase           # business logic
-    transport         # interface
-    transport/<proto> # handler + dto
-    setup             # wiring
+    storage                       # interface
+    storage/<impl>                # adapter
+    storage/<impl>_dto            # translation
+    gateway                       # interface
+    gateway/<impl>                # adapter
+    gateway/<impl>_dto            # translation
+    usecase                       # business logic
+    transport                     # interface
+    transport/<impl>              # handler
+    transport/<impl>_dto          # translation
+    setup                         # wiring
 ```
+
+Every adapter `<impl>` pairs with a sibling `<impl>_dto`.
 
 **Hard rule**: domains may only import another domain's `entities` and `usecase`.
 
