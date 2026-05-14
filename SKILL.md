@@ -88,6 +88,143 @@ When reviewing code against this pattern, flag:
 - Missing `setup` — usecase constructed in `main` directly
 - Multi-purpose domain (split it)
 - Cyclic dep between domains (extract shared entities domain or invert)
+- Storage method names encoding business rules (e.g. `GetEligibleUsers`) — split into neutral query + usecase composition
+- Gateway interpreting error codes for retry/fallback — return raw, decide in usecase
+- Transport doing domain validation (e.g. approved-email-domain checks) — only check shape/presence
+- Usecase reaching past its storage interface to call `db.Query` directly
+- Setup branching on env/feature flags — pass deps in instead
+
+## Layer rules — examples
+
+### Storage
+
+**Allowed** — pure data retrieval:
+
+```go
+func (r *MySQLUserRepo) GetByID(ctx context.Context, id string) (*dto.UserRow, error) {
+    return r.db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
+}
+```
+
+**Violation** — business logic in storage:
+
+```go
+// Bad: "active premium users only" is a business rule, not a query concern
+func (r *MySQLUserRepo) GetEligibleUsers(ctx context.Context) ([]*dto.UserRow, error) {
+    return r.db.Query("SELECT * FROM users WHERE status = 'active' AND plan = 'premium' AND last_login > NOW() - INTERVAL 30 DAY")
+}
+```
+
+Fix: expose `GetByStatus(status string)` and let the usecase compose the eligibility check.
+
+### Gateway
+
+**Allowed** — pure external call, raw response:
+
+```go
+func (g *StripeGateway) ChargeCard(ctx context.Context, req ChargeRequest) (*ChargeResponse, error) {
+    return g.client.Post("/charges", req)
+}
+```
+
+**Violation** — decision-making in gateway:
+
+```go
+// Bad: retry based on business meaning of error codes is a business rule
+func (g *StripeGateway) ChargeCard(ctx context.Context, req ChargeRequest) (*ChargeResponse, error) {
+    resp, err := g.client.Post("/charges", req)
+    if err != nil && isRetryableBusinessError(err) {
+        // retry with fallback payment method
+    }
+    return resp, err
+}
+```
+
+Fix: return the raw error; let usecase decide whether to retry or fall back.
+
+### Transport
+
+**Allowed** — parse request, call usecase, format response:
+
+```go
+func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
+    var dto CreateUserDTO
+    json.NewDecoder(r.Body).Decode(&dto)
+    user, err := h.usecase.CreateUser(r.Context(), dto.Name, dto.Email)
+    json.NewEncoder(w).Encode(toResponse(user))
+}
+```
+
+**Violation** — business validation in transport:
+
+```go
+// Bad: "email must be from approved domain" is a business rule
+func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
+    var dto CreateUserDTO
+    json.NewDecoder(r.Body).Decode(&dto)
+    if !strings.HasSuffix(dto.Email, "@company.com") {
+        http.Error(w, "only company emails allowed", 400)
+        return
+    }
+    // ...
+}
+```
+
+Fix: move the domain check into usecase. Transport only validates field presence and well-formedness (not empty, valid email syntax).
+
+### Usecase / Service
+
+**Allowed** — orchestrates via interfaces, contains the business rule:
+
+```go
+func (u *UserUsecase) CreateUser(ctx context.Context, name, email string) (*entities.User, error) {
+    if !isApprovedDomain(email) {
+        return nil, ErrUnauthorizedDomain
+    }
+    existing, _ := u.storage.GetByEmail(ctx, email)
+    if existing != nil {
+        return nil, ErrAlreadyExists
+    }
+    return u.storage.Save(ctx, &entities.User{Name: name, Email: email})
+}
+```
+
+**Violation** — raw DB call in usecase:
+
+```go
+// Bad: usecase directly querying the database
+func (u *UserUsecase) CreateUser(ctx context.Context, name, email string) (*entities.User, error) {
+    row := u.db.QueryRow("SELECT id FROM users WHERE email = ?", email)
+    // ...
+}
+```
+
+Fix: add `GetByEmail` to the storage interface and call that instead.
+
+### Setup / Wiring
+
+**Allowed** — pure dependency injection:
+
+```go
+func NewUserDomain(db *sql.DB, httpClient *http.Client) UserUsecaseInterface {
+    storage := mysql.NewUserRepo(db)
+    gateway := stripe.NewGateway(httpClient)
+    return usecase.NewUserUsecase(storage, gateway)
+}
+```
+
+**Violation** — logic in setup:
+
+```go
+// Bad: setup making a runtime decision
+func NewUserDomain(db *sql.DB, env string) UserUsecaseInterface {
+    if env == "prod" {
+        // different logic path
+    }
+}
+```
+
+Fix: pass the right dependencies in from outside; setup just wires them.
 
 ## Anti-patterns
 
