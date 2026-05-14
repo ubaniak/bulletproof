@@ -42,7 +42,6 @@ In any Claude Code session, ask things like:
 ## Files
 
 - [`SKILL.md`](./SKILL.md) — skill definition loaded by Claude Code
-- [`layout.md`](./layout.md) — original layout sketch this skill is built from
 
 ## Pattern summary
 
