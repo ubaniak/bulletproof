@@ -1,344 +1,224 @@
 ---
 name: bulletproof
-description: Bulletproof domain-driven architecture pattern with enforced SOLID design. Use when scaffolding a new domain, organizing backend services, reviewing layering/import boundaries, checking SOLID compliance, or when user mentions "bulletproof", "domain layout", "useCase", "gateway", "storage adapter", "SOLID", "SRP", "DIP", "open/closed", or asks how to structure a service with entities/storage/gateway/useCase/transport layers.
+description: Bulletproof domain-driven backend architecture with enforced SOLID design. Use when scaffolding a new domain or service, reviewing layering/import boundaries, placing a file, designing errors, transactions, events, auth, tests, or API conventions for a backend, or when the user mentions "bulletproof", "domain layout", "useCase", "gateway", "storage adapter", "transport", "composition root", "SOLID", "SRP", "DIP", or asks how to structure a backend service.
 ---
 
-# Bulletproof Architecture
+# Bulletproof Backend Architecture
 
-A domain-driven layout for backend services. Each domain is a self-contained unit with clear inbound/outbound boundaries. **The layout structurally enforces SOLID** — see [SOLID enforcement](#solid-enforcement) below.
+An opinionated blueprint for backend services. Code is split into self-contained **domains**, each with strict inbound/outbound boundaries, sitting on a small **platform** layer and assembled by one **app** composition root. **The layout structurally enforces SOLID** — see [rules/solid.md](rules/solid.md).
 
-## Layout
+This file is the umbrella: layout, hard rules, and checklists. Detailed rules with wrong/right examples live in `rules/`. Load the rule file for the topic at hand rather than guessing.
+
+Examples are Go. The layout is language-neutral — see [Language mapping](#language-mapping).
+
+## Project layout
 
 ```
+cmd/<binary>/main.go          # entrypoint: load config, call app.Run
+app/                          # composition root: builds platform, calls every domain's setup,
+                              # mounts transports, registers middleware, owns startup/shutdown
+platform/                     # shared kernel: config, logger, tracer, db pool, tx manager, clock,
+                              # id generator, base error types. Imports NO domain.
 <domain>/
-    entities/
-        entities              # plain domain types, no IO
-    storage                   # interface (port)
+    entities/                 # domain types + invariants, no IO
+    errors                    # domain error values/types (part of the public API)
+    storage                   # interface (port), split per aggregate
     storage/
-        mysql                 # adapter
-        mysql_dto             # row <-> entity translation
-        pg                    # adapter
-        pg_dto                # row <-> entity translation
-        mongodb               # adapter
-        mongodb_dto           # doc <-> entity translation
-    gateway                   # interface (port)
+        <impl>/               # adapter (mysql, pg, mongodb, cached, ...)
+        <impl>_dto/           # row/doc <-> entity translation
+    gateway                   # interface (port), split per capability
     gateway/
-        api                   # api adapter
-        api_dto               # external api wire types
-        rest                  # rest adapter
-        rest_dto              # external rest wire types
-    useCase | service         # interface + implementation
+        <impl>/               # adapter (stripe, quickbooks, ...)
+        <impl>_dto/           # external wire types <-> entity translation
+    publisher                 # interface (port) for outbound domain events (optional)
+    useCase                   # interface + implementation — business rules only
     transport                 # interface (port)
     transport/
-        rest                  # rest handler
-        rest_dto              # inbound rest wire types
-        grpc                  # grpc handler
-        grpc_dto              # inbound grpc wire types
-    setup                     # constructs and wires useCase + transport
+        <impl>/               # handler (rest, grpc, consumer, webhook, cron)
+        <impl>_dto/           # request AND response wire types <-> entity translation
+    setup                     # wires this domain's graph; returns (UseCase, Transport)
 ```
 
-**DTO naming**: every adapter `<impl>` has a sibling `<impl>_dto` for translation. Pattern is uniform across `storage/`, `gateway/`, `transport/`.
-
-## Rules (hard)
-
-1. **Cross-domain imports**: DomainA may import only `entities` and `useCase` of DomainB. Never storage/gateway/transport of another domain.
-2. **DTOs are translators**: DTOs exist only to convert between public `entities` and an underlying service (DB row, API payload, wire format). Never leak DTOs across the layer boundary.
-3. **UseCase = business logic**: useCase/service holds business rules only. No SQL, no HTTP, no protocol details.
-4. **Single purpose**: One domain = one purpose. Nesting allowed when a sub-concept earns its own lifecycle.
-5. **Storage = persistence**: Owns durable state. Implements the domain's `storage` interface.
-6. **Gateway = third-party**: Outbound calls to external APIs. Implements the domain's `gateway` interface.
-7. **Transport = inbound**: REST/gRPC handlers translate wire → entity, call useCase, translate entity → wire.
-8. **Setup wires the graph**: Constructs concrete storage + gateway + useCase + transport. Returns useCase (for sibling domains) and transport (for the server).
+- Every adapter `<impl>` has a sibling `<impl>_dto`. Uniform across `storage/`, `gateway/`, `transport/`.
+- The business-logic layer is always called **`useCase`**. Do not mix `service` and `useCase` in one codebase.
+- A domain's **public API** is exactly: `entities`, `errors`, and the `useCase` interface. Nothing else is importable from outside.
 
 ## Dependency direction
 
 ```
-transport ──▶ useCase ──▶ storage (interface) ◀── storage/mysql
-                  │
-                  └─────▶ gateway (interface) ◀── gateway/rest
-                  │
-                  └─────▶ entities
+            app ──▶ <domain>/setup ──▶ adapters (storage/<impl>, gateway/<impl>, transport/<impl>)
+                                         │ implement
+transport ──▶ useCase ──▶ storage | gateway | publisher (interfaces) ──▶ entities, errors
+                 │
+                 └──▶ other domain's useCase interface / entities / errors
+
+platform ◀── imported by everyone; imports nothing above it
 ```
 
-Interfaces defined in the domain. Adapters implement them. UseCase depends on interfaces only.
+Interfaces are declared by the consumer (the domain). Adapters import the domain to implement them. `setup` is the only place concrete and abstract meet; `app` is the only place domains meet each other.
+
+## Rules by priority
+
+| Priority | Category | Impact | Prefix |
+|---|---|---|---|
+| 1 | Boundaries & structure | CRITICAL | `structure-` |
+| 2 | Layer responsibilities | CRITICAL | `layer-` |
+| 3 | Errors | HIGH | `errors-` |
+| 4 | Consistency (transactions, events) | HIGH | `consistency-` |
+| 5 | Security & context | HIGH | `security-` |
+| 6 | Testing | HIGH | `testing-` |
+| 7 | Cross-cutting concerns | MEDIUM | `crosscutting-` |
+| 8 | Query & API design | MEDIUM | `api-` |
+| 9 | Standards & tooling | MEDIUM | `standards-` |
+
+### 1. Boundaries & structure (CRITICAL) — [rules/structure.md](rules/structure.md)
+- `structure-cross-domain-imports` — Domain A may import only B's `entities`, `errors`, `useCase` interface.
+- `structure-public-api` — Each domain exposes one public surface; everything else is internal (Go `internal/`, TS `index.ts` + lint).
+- `structure-platform-layer` — Cross-cutting infrastructure lives in `platform/`; platform never imports a domain.
+- `structure-app-root` — `app/` is the single composition root: routes, middleware, lifecycle.
+- `structure-data-ownership` — A domain owns its tables and migrations. No cross-domain joins or table reads.
+- `structure-single-purpose` — One domain, one purpose. Nest only per the nesting rules.
+- `structure-no-cycles` — No cyclic deps between domains; extract a shared entities domain or invert via events.
+
+### 2. Layer responsibilities (CRITICAL) — [rules/layers.md](rules/layers.md)
+- `layer-entities-pure` — Entities hold invariants, no IO, never reference DTOs.
+- `layer-storage-neutral` — Storage persists and retrieves; no business rules in method names or queries.
+- `layer-gateway-dumb` — Gateway calls third parties and translates; it decides nothing.
+- `layer-usecase-rules-only` — Business rules only; no SQL, HTTP, or protocol types.
+- `layer-transport-shape-only` — Transport validates shape/presence, calls useCase, maps errors; no domain validation.
+- `layer-setup-wiring-only` — Setup constructs and wires; no env/flag branching.
+- `layer-dto-no-leak` — DTOs never cross their adapter boundary.
+
+### 3. Errors (HIGH) — [rules/errors.md](rules/errors.md)
+- `errors-domain-defined` — Each domain declares its error types in `errors`.
+- `errors-adapters-translate` — Adapters translate vendor/driver errors into domain errors; raw vendor errors never reach useCase.
+- `errors-usecase-decides` — Retry/fallback/compensation decisions live in useCase, made on domain errors.
+- `errors-transport-maps` — Each transport maps domain errors to status codes in one place.
+- `errors-expected-vs-unexpected` — Expected errors are returned, not logged as failures; unexpected errors are wrapped and logged once.
+
+### 4. Consistency (HIGH) — [rules/consistency.md](rules/consistency.md)
+- `consistency-tx-port` — Transactions via a `TxManager` port carried in `ctx`; useCase never sees `*sql.Tx`.
+- `consistency-one-domain-per-tx` — A DB transaction never spans domains.
+- `consistency-outbox` — Cross-domain or external side effects after a commit go through an outbox / domain events.
+- `consistency-idempotency` — Every inbound retryable entry point (webhook, consumer, POST with retries) is idempotent.
+
+### 5. Security & context (HIGH) — [rules/security.md](rules/security.md)
+- `security-authn-in-transport` — Authentication is transport middleware.
+- `security-authz-in-usecase` — Authorization is a business rule; it lives in useCase.
+- `security-context-propagation` — Principal, tenant, request ID travel in `ctx` via `platform` helpers.
+- `security-tenant-scoping` — Storage requires tenant scope on every multi-tenant query.
+- `security-secrets-config` — Secrets come from config/secret store, injected via setup; never literals.
+
+### 6. Testing (HIGH) — [rules/testing.md](rules/testing.md)
+- `testing-usecase-fakes` — useCase unit tests run against in-memory fakes of its ports.
+- `testing-adapter-contract` — One contract suite per port; every adapter must pass it (this is how LSP is enforced).
+- `testing-transport` — Transport tests cover wire ↔ entity and error → status mapping.
+- `testing-e2e-through-setup` — A thin layer of end-to-end tests built through `setup`/`app`.
+
+### 7. Cross-cutting concerns (MEDIUM) — [rules/crosscutting.md](rules/crosscutting.md)
+- `crosscutting-decorators` — Caching, metrics, tracing, retries-with-backoff are decorator adapters wired in setup.
+- `crosscutting-middleware` — Request logging, auth, rate limiting, recovery are transport middleware registered in `app`.
+- `crosscutting-async-transports` — Queue consumers, webhooks, cron jobs are transports like REST/gRPC.
+
+### 8. Query & API design (MEDIUM) — [rules/api.md](rules/api.md)
+- `api-neutral-filters` — Storage accepts neutral filter/criteria objects; useCase supplies the business values.
+- `api-pagination` — Cursor pagination with one shared shape.
+- `api-error-envelope` — One error response envelope across all endpoints.
+- `api-versioning` — Breaking wire changes get a new transport version, not an edited one.
+- `api-read-models` — Cross-domain reporting goes through a dedicated read-model/query domain fed by events.
+
+### 9. Standards & tooling (MEDIUM) — [rules/standards.md](rules/standards.md)
+- `standards-boundary-lint` — Import rules are enforced by a linter in CI, not only by review.
+- `standards-naming` — File, package, and type naming conventions.
+- `standards-strict-tooling` — Formatter, linter, strict types, pinned deps, pre-commit hooks, CI gates.
+
+SOLID mapping and violation signs: [rules/solid.md](rules/solid.md).
 
 ## Scaffold checklist
 
 When creating a new domain `X`:
 
-1. `X/entities/` — define core types. No imports from other layers.
-2. `X/storage.go` (or equivalent) — declare interface the useCase needs.
-3. `X/storage/<impl>/` — implement. Add sibling `X/storage/<impl>_dto/` for row mapping.
-4. `X/gateway.go` — declare interface for each external dependency.
-5. `X/gateway/<impl>/` — implement. Add sibling `X/gateway/<impl>_dto/` for wire types.
-6. `X/useCase.go` — declare interface + struct. Constructor takes storage + gateway interfaces.
-7. `X/transport.go` — declare transport interface.
-8. `X/transport/<impl>/` — implement handler. Add sibling `X/transport/<impl>_dto/` for inbound wire types. Take useCase interface in constructor.
-9. `X/setup.go` — build concrete graph, return `(UseCase, Transport)`.
+1. `X/entities/` — core types with constructor-enforced invariants. Imports only `platform` primitives.
+2. `X/errors` — declare the domain's error values/types.
+3. `X/storage` — one small interface per aggregate the useCase needs.
+4. `X/storage/<impl>/` + `<impl>_dto/` — implement; translate rows and driver errors.
+5. `X/gateway` — one small interface per external capability.
+6. `X/gateway/<impl>/` + `<impl>_dto/` — implement; translate wire types and vendor errors.
+7. `X/publisher` (if X emits events) — interface; adapter writes to the outbox.
+8. `X/useCase` — interface + struct; constructor takes only interfaces.
+9. `X/transport` + `X/transport/<impl>/` + `<impl>_dto/` — handlers take the useCase interface; one error-mapping function per transport.
+10. `X/setup` — build the concrete graph from injected platform deps; return `(UseCase, Transport)`.
+11. Tests: useCase with fakes, contract suite for each port, transport mapping tests.
+12. Migrations for X's tables live under X (or are namespaced to X).
+13. Register X in `app/` (call setup, mount transport). Add X to the boundary-lint config.
 
 ## Review checklist
 
-When reviewing code against this pattern, flag:
+Flag:
 
-- Domain importing another domain's `storage/`, `gateway/`, or `transport/` package
-- DTO types appearing in useCase signatures
-- SQL/HTTP/protocol code inside useCase
-- useCase importing concrete adapter instead of interface
-- Entity referencing DTO type
-- Missing `setup` — useCase constructed in `main` directly
-- Multi-purpose domain (split it)
-- Cyclic dep between domains (extract shared entities domain or invert)
-- Storage method names encoding business rules (e.g. `GetEligibleUsers`) — split into neutral query + useCase composition
-- Gateway interpreting error codes for retry/fallback — return raw, decide in useCase
-- Transport doing domain validation (e.g. approved-email-domain checks) — only check shape/presence
-- UseCase reaching past its storage interface to call `db.Query` directly
-- Setup branching on env/feature flags — pass deps in instead
+**Boundaries**
+- Domain importing another domain's `storage/`, `gateway/`, `transport/`, or adapter DTOs
+- Domain reading or joining another domain's tables
+- `platform/` importing a domain
+- Routes/middleware registered outside `app/`; useCase constructed in `main` instead of `setup`
+- Cyclic dependency between domains; multi-purpose domain
 
-## Layer rules — examples
+**Layers**
+- DTO types in useCase signatures or entities
+- SQL/HTTP/protocol code or `database/sql`, `net/http` imports in useCase
+- useCase importing a concrete adapter, or constructor taking `*sql.DB` / `*http.Client`
+- Storage method names encoding business rules (`GetEligibleUsers`)
+- Gateway making retry/fallback decisions based on business meaning
+- Transport doing domain validation (approved email domains, plan limits)
+- Setup branching on env/feature flags
 
-### Storage
+**Errors**
+- Vendor/driver error types (Stripe, pq, Mongo) reaching useCase
+- Status-code mapping scattered across handlers
+- Expected errors (not found, validation) logged at error level; errors logged at more than one layer
 
-**Allowed** — pure data retrieval:
+**Consistency & security**
+- `*sql.Tx` passed into useCase; transaction spanning two domains
+- External call or cross-domain write after commit without outbox/idempotency
+- Webhook/consumer handler that is not idempotent
+- Authorization in transport; query missing tenant scope; secret literal in code
 
-```go
-func (r *MySQLUserRepo) GetByID(ctx context.Context, id string) (*dto.UserRow, error) {
-    return r.db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
-}
-```
-
-**Violation** — business logic in storage:
-
-```go
-// Bad: "active premium users only" is a business rule, not a query concern
-func (r *MySQLUserRepo) GetEligibleUsers(ctx context.Context) ([]*dto.UserRow, error) {
-    return r.db.Query("SELECT * FROM users WHERE status = 'active' AND plan = 'premium' AND last_login > NOW() - INTERVAL 30 DAY")
-}
-```
-
-Fix: expose `GetByStatus(status string)` and let the useCase compose the eligibility check.
-
-### Gateway
-
-**Allowed** — pure external call, raw response:
-
-```go
-func (g *StripeGateway) ChargeCard(ctx context.Context, req ChargeRequest) (*ChargeResponse, error) {
-    return g.client.Post("/charges", req)
-}
-```
-
-**Violation** — decision-making in gateway:
-
-```go
-// Bad: retry based on business meaning of error codes is a business rule
-func (g *StripeGateway) ChargeCard(ctx context.Context, req ChargeRequest) (*ChargeResponse, error) {
-    resp, err := g.client.Post("/charges", req)
-    if err != nil && isRetryableBusinessError(err) {
-        // retry with fallback payment method
-    }
-    return resp, err
-}
-```
-
-Fix: return the raw error; let useCase decide whether to retry or fall back.
-
-### Transport
-
-**Allowed** — parse request, call useCase, format response:
-
-```go
-func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
-    var dto CreateUserDTO
-    json.NewDecoder(r.Body).Decode(&dto)
-    user, err := h.useCase.CreateUser(r.Context(), dto.Name, dto.Email)
-    json.NewEncoder(w).Encode(toResponse(user))
-}
-```
-
-**Violation** — business validation in transport:
-
-```go
-// Bad: "email must be from approved domain" is a business rule
-func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
-    var dto CreateUserDTO
-    json.NewDecoder(r.Body).Decode(&dto)
-    if !strings.HasSuffix(dto.Email, "@company.com") {
-        http.Error(w, "only company emails allowed", 400)
-        return
-    }
-    // ...
-}
-```
-
-Fix: move the domain check into useCase. Transport only validates field presence and well-formedness (not empty, valid email syntax).
-
-### UseCase / Service
-
-**Allowed** — orchestrates via interfaces, contains the business rule:
-
-```go
-func (u *UserUseCase) CreateUser(ctx context.Context, name, email string) (*entities.User, error) {
-    if !isApprovedDomain(email) {
-        return nil, ErrUnauthorizedDomain
-    }
-    existing, _ := u.storage.GetByEmail(ctx, email)
-    if existing != nil {
-        return nil, ErrAlreadyExists
-    }
-    return u.storage.Save(ctx, &entities.User{Name: name, Email: email})
-}
-```
-
-**Violation** — raw DB call in useCase:
-
-```go
-// Bad: useCase directly querying the database
-func (u *UserUseCase) CreateUser(ctx context.Context, name, email string) (*entities.User, error) {
-    row := u.db.QueryRow("SELECT id FROM users WHERE email = ?", email)
-    // ...
-}
-```
-
-Fix: add `GetByEmail` to the storage interface and call that instead.
-
-### Setup / Wiring
-
-**Allowed** — pure dependency injection:
-
-```go
-func NewUserDomain(db *sql.DB, httpClient *http.Client) UserUseCaseInterface {
-    storage := mysql.NewUserRepo(db)
-    gateway := stripe.NewGateway(httpClient)
-    return useCase.NewUserUseCase(storage, gateway)
-}
-```
-
-**Violation** — logic in setup:
-
-```go
-// Bad: setup making a runtime decision
-func NewUserDomain(db *sql.DB, env string) UserUseCaseInterface {
-    if env == "prod" {
-        // different logic path
-    }
-}
-```
-
-Fix: pass the right dependencies in from outside; setup just wires them.
+**Tests**
+- New adapter not run against the port's contract suite
+- useCase test requiring a real DB
 
 ## Anti-patterns
 
-- **Anemic entities**: entities reduced to bags of fields with no invariants. Push validation into entity constructors.
-- **Leaky DTO**: returning a `mysql_dto` row from useCase. Translate at the storage boundary.
-- **God useCase**: one useCase orchestrating many domains. Split or introduce an application-layer coordinator.
-- **Transport shortcut**: handler calling storage directly to "save a round trip". Always go through useCase.
-- **Shared mutable entity**: two domains mutating the same entity type. Each domain owns its entities; translate at the seam.
-
-## When to nest a sub-domain
-
-Nest `X/Y/` when:
-- `Y` has its own lifecycle (independent CRUD, separate persistence)
-- `Y` is only meaningful inside `X` (otherwise lift to sibling)
-- External callers never reference `Y` directly
-
-Otherwise, keep flat.
-
-## SOLID enforcement
-
-Bulletproof is opinionated SOLID. Each principle maps to a structural rule the layout already enforces.
-
-### S — Single Responsibility
-
-Each layer has one reason to change:
-
-- **entities** change when domain invariants change
-- **storage** changes when persistence engine/schema changes
-- **gateway** changes when third-party contract changes
-- **useCase** changes when business rules change
-- **transport** changes when wire protocol changes
-- **setup** changes when wiring changes
-
-**Violation signs:**
-- useCase handling both billing and notifications → split into two domains or coordinator
-- storage adapter formatting JSON for HTTP response → that belongs in transport
-- entity opening DB connections → entity should be pure data + invariants
-- one file holding useCase + storage + transport → split into layers
-
-### O — Open / Closed
-
-Add a new adapter, never modify existing ones:
-
-- New DB? Add `storage/<newengine>/` + `<newengine>_dto/`. Don't edit `mysql/`.
-- New protocol? Add `transport/<newproto>/` + `<newproto>_dto/`. Don't edit `rest/`.
-- New external provider? Add `gateway/<newprovider>/` + `<newprovider>_dto/`. Don't edit `api/`.
-
-useCase depends on the interface, so adding adapters never touches business logic.
-
-**Violation signs:**
-- if/else in useCase switching on `db.kind == "mysql"`
-- shared mutable adapter base class everyone extends
-- changing storage interface every time a new adapter joins (interface should be stable; adapters conform)
-
-### L — Liskov Substitution
-
-Every adapter must be a true substitute for its interface:
-
-- `storage/mysql` and `storage/pg` return identical errors for identical inputs
-- `gateway/stripe` and `gateway/braintree` cannot have one throw on missing field and the other silently default
-- Adapter-specific behavior (timeouts, retries that respect contract) is fine; differing semantics is not
-
-**Violation signs:**
-- useCase tests pass with one storage adapter and fail with another (without a real bug in the adapter)
-- documentation says "only use `mysql` adapter for X" — that's a leaked contract; fix the interface
-- adapter throws an error type not declared in the interface
-
-### I — Interface Segregation
-
-Keep layer interfaces small and role-specific. One fat `Repository` interface is an anti-pattern.
-
-- Split storage by aggregate: `UserStorage`, `OrderStorage`, not `Storage`
-- Split gateway by capability: `PaymentGateway`, `RefundGateway`, not `StripeClient`
-- Split transport by handler group; don't make a god-handler interface
-
-useCase should depend only on the methods it calls. If a useCase needs `GetByID` only, don't force it to know about `BulkDelete`.
-
-**Violation signs:**
-- useCase imports an interface with 20 methods and uses 2
-- mock objects with stubs for unused methods
-- adding a method to an interface breaks unrelated useCases
-
-### D — Dependency Inversion
-
-The whole layout exists to enforce this. High-level (useCase) depends on abstractions (interfaces declared in the domain). Low-level (mysql, stripe, rest) implements those abstractions.
-
-- Interfaces live with the **consumer** (the domain), not with the adapter
-- Adapters import the domain to implement the interface
-- useCase never imports `storage/mysql` — only `storage` (interface)
-- `setup` is the only place where concrete and abstract meet
-
-**Violation signs:**
-- useCase imports `database/sql` or `net/http`
-- domain interface lives in the adapter package
-- useCase constructor takes a `*sql.DB`
-- circular import between domain and adapter (interface is on the wrong side)
-
-### SOLID review checklist
-
-When reviewing, flag:
-
-- **SRP**: layer doing two jobs, file doing two layers' work
-- **OCP**: type switches on adapter kind, modifying existing adapter to add a feature
-- **LSP**: adapter with semantics that differ from the interface contract
-- **ISP**: interfaces with methods no caller uses; fat repository
-- **DIP**: useCase importing concrete adapter, interface declared in adapter package, concrete types in useCase constructor signatures
+- **Anemic entities** — bags of fields with no invariants. Validate in entity constructors.
+- **Leaky DTO / leaky vendor** — returning a `mysql_dto` row or a `*stripe.Error` from an adapter. Translate at the boundary.
+- **God useCase** — one useCase orchestrating many domains. Split, or create a coordinator domain ([rules/structure.md](rules/structure.md)).
+- **Transport shortcut** — handler calling storage directly. Always go through useCase.
+- **Shared mutable entity** — two domains mutating the same entity type. Each domain owns its entities.
+- **Cross-domain join** — reading another domain's tables for a report. Use a read model.
+- **Remote call inside a DB transaction** — use the outbox.
+- **Growing `platform/utils`** — business logic hiding in the shared kernel. Find the owning domain.
 
 ## Quick reference
 
-| Layer     | Role               | Direction | Owns          |
-|-----------|--------------------|-----------|---------------|
-| entities  | domain types       | —         | invariants    |
-| storage   | persistence port   | outbound  | durable state |
-| gateway   | 3rd-party port     | outbound  | external IO   |
-| useCase   | business logic     | center    | rules         |
-| transport | inbound port       | inbound   | protocol IO   |
-| setup     | composition root   | —         | wiring        |
+| Layer | Role | Direction | Owns |
+|---|---|---|---|
+| platform | shared kernel | — | infra primitives |
+| entities | domain types | — | invariants |
+| errors | domain errors | — | error contract |
+| storage | persistence port | outbound | durable state |
+| gateway | 3rd-party port | outbound | external IO |
+| publisher | event port | outbound | emitted events |
+| useCase | business logic | center | rules, authz, retries |
+| transport | inbound port | inbound | protocol IO, error mapping |
+| setup | domain wiring | — | domain graph |
+| app | composition root | — | process lifecycle |
+
+## Language mapping
+
+| Concept | Go | TypeScript |
+|---|---|---|
+| Port | `storage.go` interface in domain package | `storage.ts` exported `interface` |
+| Adapter | `storage/mysql/` package | `storage/mysql/` folder |
+| Public API | non-`internal/` packages | `index.ts` re-exports only |
+| Boundary lint | `go-arch-lint`, `depguard` | `eslint-plugin-boundaries`, `dependency-cruiser` |
+| Context | `context.Context` | `AsyncLocalStorage` or explicit `ctx` param |
