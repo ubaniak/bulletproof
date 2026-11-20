@@ -86,7 +86,10 @@ Explicit `ctx` parameter (preferred), or Kotlin coroutine context elements. Avoi
 ## Transactions
 
 ```kotlin
-interface TxManager { fun <T> withinTx(ctx: Ctx, work: (Ctx) -> T): T }
+interface TxManager {
+    fun <T> withinTx(ctx: Ctx, work: (Ctx) -> T): T
+    fun detached(ctx: Ctx): Ctx   // same ctx without the active transaction
+}
 ```
 Adapter implemented with Spring `TransactionTemplate` or jOOQ `transactionResult`. **No `@Transactional` on service** — the annotation couples business logic to Spring and hides boundaries.
 

@@ -12,7 +12,7 @@ The layout makes each layer testable in isolation. Use that.
 
 ## testing-service-fakes
 
-service tests run against in-memory fakes of its ports — fast, no DB, no network.
+Service tests run against in-memory fakes of its ports — fast, no DB, no network.
 
 - Prefer hand-written fakes (`storage/memory`) over mocking frameworks. A fake that implements the port is itself an adapter and must pass the contract suite.
 - Small ports (ISP) keep fakes small. If a fake needs 20 stubs, the port is too fat.

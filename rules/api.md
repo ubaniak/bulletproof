@@ -11,7 +11,7 @@ port UserStorage
   list(ctx, f: UserFilter) -> Page<User>
 ```
 
-- service owns the **values** ("eligible = active + premium + seen in 30 days").
+- The service owns the **values** ("eligible = active + premium + seen in 30 days").
 - Storage owns the **translation** to SQL/indexes/ORM queries.
 - If a query needs a dedicated method for performance, name it after the data shape, not the rule (`listByStatusAndPlan`, not `getEligibleUsers`).
 - Do not expose ORM query builders or raw query fragments through the port.
@@ -26,7 +26,7 @@ port UserStorage
 
 ## api-error-envelope
 
-All HTTP endpoints return errors in one envelope produced by the transport error mapper:
+All HTTP endpoints return errors in one envelope produced by the shared REST error mapper in `platform/rest`:
 
 ```json
 { "error": { "code": "card_declined", "message": "card was declined", "request_id": "..." } }

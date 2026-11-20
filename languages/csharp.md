@@ -78,7 +78,11 @@ Explicit `Ctx` parameter (preferred, carries `CancellationToken`), or `AsyncLoca
 ## Transactions
 
 ```csharp
-public interface ITxManager { Task<T> WithinTx<T>(Ctx ctx, Func<Ctx, Task<T>> work); }
+public interface ITxManager
+{
+    Task<T> WithinTx<T>(Ctx ctx, Func<Ctx, Task<T>> work);
+    Ctx Detached(Ctx ctx);   // same ctx without the active transaction
+}
 ```
 Adapter implemented with EF Core `Database.BeginTransactionAsync` or `TransactionScope`; `DbContext` lives only in storage adapters.
 

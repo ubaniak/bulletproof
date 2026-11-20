@@ -1,6 +1,6 @@
 ---
 name: bulletproof
-description: Bulletproof domain-driven backend architecture with enforced SOLID design, for any backend language (Go, TypeScript, Python, Java/Kotlin, C#, ...). Use when scaffolding a new domain or service, reviewing layering/import boundaries, placing a file, designing errors, transactions, events, auth, tests, or API conventions for a backend, or when the user mentions "bulletproof", "domain layout", "service", "gateway", "storage adapter", "transport", "port", "adapter", "composition root", "SOLID", "SRP", "DIP", or asks how to structure a backend service.
+description: Bulletproof domain-driven backend architecture with enforced SOLID design, for any backend language (Go, TypeScript, Python, Java/Kotlin, C#, ...). Use when scaffolding a new domain or backend service, reviewing layering/import boundaries, placing a file, designing errors, transactions, events, auth, tests, or API conventions for a backend, or when the user mentions "bulletproof", "domain layout", "service layer", "service port", "gateway", "storage adapter", "transport", "port", "adapter", "composition root", "SOLID", "SRP", "DIP", or asks how to structure a backend service.
 ---
 
 # Bulletproof Backend Architecture
@@ -70,7 +70,7 @@ Each entry is a **unit of code ownership**: it may be a directory, package, modu
 - Ports sit at the domain root; adapters and translators sit beneath their port.
 - Every adapter `<impl>` has a sibling translator `<impl>_dto` (casing per language file). A transport `transport/<protocol>/<domain>` has the sibling `transport/<protocol>/<domain>_dto`.
 - Transport is **not** part of a domain. It sits at the root beside `platform/` and `app/`, grouped by protocol and then by domain (`transport/rest/<domain>`, `transport/cmd/<domain>`).
-- The business layer is always called **service**. Use that one name everywhere (no `useCase`, `manager`, or `handler` for it).
+- The business layer is always called **service**. Use that one name everywhere (no `useCase`, `manager`, or `handler` for it). In this skill `service` means only that layer: never a deployable, a DI-registered object in general, or a framework stereotype (`@Service`, `IServiceCollection`).
 - A domain's **public API** is exactly: `entities`, `errors`, the `service` port (and published event types). Everything else must be made unreachable from outside the domain by the language's visibility rules or a boundary linter.
 
 ## Dependency direction
@@ -97,7 +97,7 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 
 - Framework annotations, decorators, base classes, and request/response types are allowed in **transport, adapters, setup, app** only.
 - **Never** in entities or service: no `@Transactional`, `@Injectable`, ORM model base classes, `Request`/`Response` objects, or framework exceptions.
-- DI containers are configured only in `setup`/`app`. service gets its ports via constructor/parameters, never by looking them up.
+- DI containers are configured only in `setup`/`app`. A service gets its ports via constructor/parameters, never by looking them up.
 
 ## Rules by priority
 
@@ -136,12 +136,12 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 - `errors-domain-defined` — Each domain declares its errors with a kind and stable code.
 - `errors-adapters-translate` — Adapters translate vendor/driver failures into domain errors; vendor error types never reach service.
 - `errors-service-decides` — Retry/fallback/compensation decisions live in service, made on domain errors.
-- `errors-transport-maps` — Each transport maps domain errors to protocol responses in exactly one place.
+- `errors-transport-maps` — Each protocol maps domain errors to responses in exactly one place (`platform/<protocol>`), shared by all domains.
 - `errors-expected-vs-unexpected` — Expected errors are control flow; unexpected errors are logged once at the boundary.
 
 ### 4. Consistency (HIGH) — [rules/consistency.md](rules/consistency.md)
 - `consistency-tx-port` — Transactions via a `TxManager` port; service never holds a connection/session/transaction object.
-- `consistency-one-domain-per-tx` — A DB transaction never spans domains.
+- `consistency-one-domain-per-tx` — A DB transaction never spans domains; cross-domain calls inside a transaction use `tx.detached(ctx)` or move to an event.
 - `consistency-outbox` — Post-commit side effects (other domains, third parties) go through an outbox.
 - `consistency-idempotency` — Every retryable inbound entry point is idempotent.
 
@@ -191,7 +191,7 @@ When creating a new domain `X` (concrete file names and syntax from the language
 7. `X/publisher` (if X emits events) — port; adapter writes to the outbox.
 8. `X/service` — port + implementation; receives only ports.
 9. `X/setup` — build the concrete graph from injected platform deps; return the service.
-10. `transport/<protocol>/X` + `transport/<protocol>/X_dto` for each protocol X is exposed on (`rest`, `cmd`, ...) — handlers receive the service port; one error-mapping function per protocol.
+10. `transport/<protocol>/X` + `transport/<protocol>/X_dto` for each protocol X is exposed on (`rest`, `cmd`, ...) — handlers receive the service port; handlers call the shared `platform/<protocol>` error mapper rather than writing their own.
 11. Tests: service with fakes, contract suite per port (run against every adapter incl. the fake), transport mapping tests.
 12. Migrations for X's tables owned by X.
 13. Register X in `app/` (call setup, build each transport with the service, mount it). Add X to the boundary-lint config.
@@ -211,9 +211,9 @@ Flag:
 
 **Layers**
 - Translator types in service signatures or entities
-- service or entities depending on any IO library or framework type (DB driver/ORM, HTTP, broker SDK, vendor SDK, framework annotations)
-- service receiving a connection, client, session, or transaction object instead of a port
-- service depending on a concrete adapter instead of a port
+- Service or entities depending on any IO library or framework type (DB driver/ORM, HTTP, broker SDK, vendor SDK, framework annotations)
+- Service receiving a connection, client, session, or transaction object instead of a port
+- Service depending on a concrete adapter instead of a port
 - Storage method names encoding business rules (`getEligibleUsers`)
 - Gateway making retry/fallback decisions based on business meaning
 - Transport doing domain validation (approved email domains, plan limits)
@@ -232,7 +232,7 @@ Flag:
 
 **Tests**
 - New adapter not run against its port's contract suite
-- service test requiring a real DB or network
+- Service test requiring a real DB or network
 
 ## Anti-patterns
 

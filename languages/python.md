@@ -48,36 +48,63 @@ Python cannot hide modules, so enforcement is tooling:
 ```ini
 [importlinter]
 root_package = project
+include_external_packages = True
 
 [importlinter:contract:platform-independent]
 name = platform depends on no domain
 type = forbidden
-source_modules = project.platform
-forbidden_modules = project.timesheet, project.payroll
+source_modules =
+    project.platform
+forbidden_modules =
+    project.timesheet
+    project.payroll
 
 [importlinter:contract:no-adapter-reach]
 name = domains use only each other's public API
 type = forbidden
-source_modules = project.payroll
-forbidden_modules = project.timesheet.storage, project.timesheet.gateway, project.timesheet.setup
+source_modules =
+    project.payroll
+forbidden_modules =
+    project.timesheet.storage
+    project.timesheet.gateway
+    project.timesheet.setup
 
 [importlinter:contract:domains-ignore-transport]
 name = no domain depends on transport
 type = forbidden
-source_modules = project.timesheet, project.payroll
-forbidden_modules = project.transport
+source_modules =
+    project.timesheet
+    project.payroll
+forbidden_modules =
+    project.transport
 
 [importlinter:contract:transport-public-api-only]
-name = transport uses only its own domain's public API
+name = transport uses only domains' public API
 type = forbidden
-source_modules = project.transport
-forbidden_modules = project.timesheet.storage, project.timesheet.gateway, project.timesheet.setup, project.payroll.storage, project.payroll.gateway, project.payroll.setup
+source_modules =
+    project.transport
+forbidden_modules =
+    project.timesheet.storage
+    project.timesheet.gateway
+    project.timesheet.setup
+    project.payroll.storage
+    project.payroll.gateway
+    project.payroll.setup
 
 [importlinter:contract:pure-core]
 name = entities and services import no IO
 type = forbidden
-source_modules = project.timesheet.entities, project.timesheet.service
-forbidden_modules = sqlalchemy, psycopg, httpx, requests, fastapi, django, stripe
+source_modules =
+    project.timesheet.entities
+    project.timesheet.service
+forbidden_modules =
+    sqlalchemy
+    psycopg
+    httpx
+    requests
+    fastapi
+    django
+    stripe
 ```
 
 ## Errors
@@ -115,6 +142,7 @@ Transport: one exception handler per app (FastAPI `exception_handler(DomainError
 ```python
 class TxManager(Protocol):
     def within_tx(self, ctx: Ctx) -> AbstractAsyncContextManager[Ctx]: ...
+    def detached(self, ctx: Ctx) -> Ctx: ...   # same ctx without the active transaction
 
 async with self.tx.within_tx(ctx) as ctx:
     await self.timesheets.save(ctx, ts)

@@ -57,9 +57,9 @@ components:
   platform: { in: platform/** }
   app:      { in: app/** }
   transport: { in: transport/** }
-  domain:   { in: "*" }                     # domain root packages
-  entities: { in: "*/entities" }
-  adapters: { in: "*/internal/**" }
+  domain:   { in: [timesheet, payroll] }    # list domain root packages explicitly; "*" would overlap app, platform, transport
+  entities: { in: [timesheet/entities, payroll/entities] }
+  adapters: { in: [timesheet/internal/**, payroll/internal/**] }
 deps:
   platform: { mayDependOn: [] }
   entities: { mayDependOn: [platform] }
@@ -68,6 +68,8 @@ deps:
   transport: { mayDependOn: [platform, entities, domain] }   # domain = public root package only (internal/ is unreachable)
   app:      { mayDependOn: [platform, transport, domain, entities] }
 ```
+
+This is a sketch: shared components cannot say "a transport may import only *its own* domain". Enforce that by giving each domain its own components (`timesheet`, `timesheet_transport`, ...) or in review, and add each new domain to the lists above.
 
 `golangci-lint` with `depguard` to deny IO packages in domain root and entities:
 ```yaml
@@ -109,7 +111,7 @@ func TranslateError(err error) error {
 }
 ```
 
-Transport: one `writeError(w, err)` per `transport/<protocol>/<domain>` package that switches on `Kind`.
+Transport: one `writeError(w, err)` per protocol in `platform/rest` that switches on `Kind`; every `transport/rest/<domain>` handler calls it.
 
 ## Context
 
@@ -120,9 +122,10 @@ Transport: one `writeError(w, err)` per `transport/<protocol>/<domain>` package 
 ```go
 type TxManager interface {
     WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
+    Detached(ctx context.Context) context.Context   // ctx without the active *sql.Tx
 }
 ```
-The adapter stores `*sql.Tx` in ctx; storage adapters call `db.Conn(ctx)` which returns the tx if present. service never sees `*sql.Tx`.
+The adapter stores `*sql.Tx` in ctx; storage adapters call `db.Conn(ctx)` which returns the tx if present. The service never sees `*sql.Tx`.
 
 ## Wiring
 

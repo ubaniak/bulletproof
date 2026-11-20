@@ -5,7 +5,7 @@ Errors cross every layer, so they need one model. It is defined in terms of **ki
 ```
 driver/vendor failure ──(adapter translator)──▶ domain error ──(service decides)──▶ domain error
                                                                        │
-                                  transport maps once ──▶ HTTP status / gRPC code / ack-nack
+                                  transport calls platform/<protocol> mapper once ──▶ HTTP status / gRPC code / ack-nack
 ```
 
 ## errors-domain-defined
@@ -62,7 +62,7 @@ on payments.RateLimited:
 
 ## errors-transport-maps
 
-Each transport has exactly one error → response mapping (a function, an exception filter/handler, or middleware):
+Each **protocol** has exactly one error → response mapping (a function, an exception filter/handler, or middleware), shared by every domain's transport for that protocol. Domain errors carry a kind and stable code, so the mapper needs no domain knowledge. It lives in `platform/<protocol>` (e.g. `platform/rest`), because transports may not depend on each other. Individual `transport/<protocol>/<domain>` handlers call it; they do not re-implement it.
 
 | Kind | HTTP | gRPC | Consumer |
 |---|---|---|---|

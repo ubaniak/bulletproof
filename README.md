@@ -12,13 +12,13 @@ When this skill is installed, Claude Code will use the bulletproof layout to:
 - Wire per-domain `setup` and the `app/` composition root correctly
 - Enforce SOLID — each principle maps to a structural rule in the layout
 
-The skill auto-triggers when you mention "bulletproof", "domain layout", "service", "gateway", "storage adapter", "composition root", or ask how to structure a backend service.
+The skill auto-triggers when you mention "bulletproof", "domain layout", "service layer", "service port", "gateway", "storage adapter", "composition root", or ask how to structure a backend service.
 
 ## Install
 
 Clone into your Claude skills directory:
 
-    git clone <this-repo-url> ~/.claude/skills/bulletproof
+    git clone https://github.com/ubaniak/bulletproof ~/.claude/skills/bulletproof
 
 Or symlink an existing checkout:
 

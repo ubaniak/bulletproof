@@ -40,7 +40,8 @@ transport/
 - `transport/<protocol>/<domain>` may depend on `platform` and **that domain's public API only** (`entities`, `errors`, `service` port). It never touches `storage`, `gateway`, `setup`, or another domain.
 - A handler that needs several domains belongs to a coordinator domain's transport (see Application coordinators), not to one that reaches across.
 - No domain depends on `transport/`. Deleting `transport/` must leave every domain compiling and its tests green.
-- Transports do not depend on each other; shared wire primitives (error envelope, pagination) go in `platform/`.
+- Transports do not depend on each other. Shared wire primitives for a protocol (error mapper, error envelope, pagination shape, middleware primitives) live in `platform/<protocol>`, e.g. `platform/rest`; they know error kinds, never domains.
+- An endpoint or command that composes several domains (a dashboard, a combined view) belongs to a **coordinator domain** with its own `transport/<protocol>/<coordinator>`. A thin, read-only coordinator that owns no tables is expected and fine; the alternative is a transport reaching across domains, which is not allowed.
 - Adding a protocol or a domain's exposure means adding a folder under `transport/`; no domain changes.
 
 **Wrong**
@@ -63,7 +64,7 @@ transport/rest/orders        # depends on orders' service port, entities, errors
 - clock, ID generator
 - error kinds (`Invalid`, `NotFound`, `Conflict`, `Unauthorized`, `Forbidden`, `RateLimited`, `Unavailable`, `Internal`)
 - ctx helpers (principal, tenant, request ID)
-- server plumbing, middleware primitives
+- server plumbing, middleware primitives, and per-protocol wire primitives (`platform/rest`: error mapper, error envelope, pagination shape)
 
 Rules:
 - `platform/` **never** depends on a domain.
