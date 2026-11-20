@@ -46,7 +46,7 @@ Order is decided in `app/` and is the same for every domain's routes.
 
 ## crosscutting-async-transports
 
-REST and gRPC are not the only inbound ports. These are all transports with their own `<impl>` + translator, following every transport rule (shape-only validation, call service, map errors):
+REST and gRPC are not the only transports. These are all transports, one folder per domain with its own translator, following every transport rule (shape-only validation, call service, map errors):
 
 ```
 transport/

@@ -59,7 +59,7 @@ Keep ports small and role-specific. One fat `Repository` port is an anti-pattern
 
 - Split storage by aggregate: `UserStorage`, `OrderStorage`, not `Storage`
 - Split gateway by capability: `PaymentGateway`, `RefundGateway`, not `StripeClient`
-- Split transport by handler group; no god-handler port
+- Split handlers by group; no god-handler
 
 service depends only on the methods it calls.
 

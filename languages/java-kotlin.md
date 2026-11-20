@@ -47,7 +47,10 @@ ArchUnit:
 
 @ArchTest val noAdapterReach = noClasses().that().resideOutsideOfPackage("com.acme.timesheet..")
     .should().dependOnClassesThat().resideInAnyPackage(
-        "com.acme.timesheet.storage..", "com.acme.timesheet.gateway..", "com.acme.timesheet.setup..")
+        "com.acme.timesheet.storage..", "com.acme.timesheet.gateway..")
+
+@ArchTest val setupOnlyFromApp = noClasses().that().resideOutsideOfPackages("com.acme.timesheet..", "com.acme.app..")
+    .should().dependOnClassesThat().resideInAPackage("com.acme.timesheet.setup..")
 
 @ArchTest val domainsIgnoreTransport = noClasses().that().resideInAnyPackage("com.acme.timesheet..", "com.acme.payroll..")
     .should().dependOnClassesThat().resideInAPackage("com.acme.transport..")
