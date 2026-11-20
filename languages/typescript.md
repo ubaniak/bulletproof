@@ -9,6 +9,10 @@ src/
   main.ts                         # load config, app.run()
   app/app.ts
   platform/{config,logger,db,tx,errors,context,clock}.ts
+  transport/                      # inbound adapters: protocol, then domain
+    rest/timesheet/  rest/timesheet-dto/
+    webhook/timesheet/  webhook/timesheet-dto/
+    cmd/timesheet/  cmd/timesheet-dto/
   timesheet/
     index.ts                      # PUBLIC API: re-exports entities, errors, Service type, events
     entities/timesheet.ts
@@ -17,14 +21,12 @@ src/
     gateway.ts
     publisher.ts
     service.ts                   # Service port + implementation
-    transport.ts
     setup.ts
     storage/mysql/  storage/mysql-dto/  storage/memory/  storage/contract.ts
     gateway/quickbooks/  gateway/quickbooks-dto/
-    transport/rest/  transport/rest-dto/  transport/webhook/  transport/webhook-dto/
 ```
 
-Other domains import only `@/timesheet` (the `index.ts`), never deep paths.
+Other domains and `transport/**` import only `@/timesheet` (the `index.ts`), never deep paths.
 
 ## Ports
 
@@ -53,8 +55,10 @@ settings: {
     { type: "platform", pattern: "src/platform/*" },
     { type: "app",      pattern: "src/app/*" },
     { type: "public",   pattern: "src/*/index.ts", mode: "file", capture: ["domain"] },
-    { type: "core",     pattern: "src/*/(entities|errors.ts|service.ts|storage.ts|gateway.ts|publisher.ts|transport.ts)", capture: ["domain"] },
-    { type: "adapter",  pattern: "src/*/(storage|gateway|transport)/*", capture: ["domain"] },
+    { type: "core",     pattern: "src/*/(entities|errors.ts|service.ts|storage.ts|gateway.ts|publisher.ts)", capture: ["domain"] },
+    { type: "adapter",  pattern: "src/*/(storage|gateway)/*", capture: ["domain"] },
+    { type: "transport-dto", pattern: "src/transport/*/*-dto", capture: ["protocol", "domain"] },   // list before "transport"
+    { type: "transport", pattern: "src/transport/*/*", capture: ["protocol", "domain"] },
     { type: "setup",    pattern: "src/*/setup.ts", mode: "file", capture: ["domain"] },
   ],
 },
@@ -64,9 +68,11 @@ rules: {
     { from: "core",    allow: ["platform", ["core", { domain: "${from.domain}" }], "public"] },
     { from: "adapter", allow: ["platform", ["core", { domain: "${from.domain}" }]] },
     { from: "setup",   allow: ["platform", ["core", { domain: "${from.domain}" }], ["adapter", { domain: "${from.domain}" }], "public"] },
-    { from: "app",     allow: ["platform", "public", "setup"] },
+    { from: "transport", allow: ["platform", ["public", { domain: "${from.domain}" }], ["transport-dto", { protocol: "${from.protocol}", domain: "${from.domain}" }]] },
+    { from: "transport-dto", allow: ["platform", ["public", { domain: "${from.domain}" }]] },
+    { from: "app",     allow: ["platform", "public", "setup", "transport"] },
   ]}],
-  "no-restricted-imports": ["error", { patterns: ["@/*/storage/*", "@/*/gateway/*", "@/*/transport/*"] }],
+  "no-restricted-imports": ["error", { patterns: ["@/*/storage/*", "@/*/gateway/*"] }],
 }
 ```
 Add an override for `entities/**` and `service.ts` restricting `pg`, `mysql2`, `prisma`, `typeorm`, `axios`, `express`, `@nestjs/*`, vendor SDKs. `dependency-cruiser` is an equivalent alternative.

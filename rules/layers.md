@@ -103,11 +103,12 @@ Fix: add `getByEmail` to the storage port.
 
 ## layer-transport-shape-only
 
-Transport (REST, gRPC, consumers, webhooks, cron) translates wire → entity, calls service, translates entity → wire, maps errors.
+Transport (`transport/<protocol>/<domain>`: REST, cmd, gRPC, consumers, webhooks, cron) lives outside the domain, translates wire → entity, calls service, translates entity → wire, maps errors.
 
 **Right**
 ```
-handler UserRestHandler(service: UserService)
+# transport/rest/users
+handler UserRestHandler(service: UserService)   # users' service port, injected by app/
   POST /users (req)
     input = rest_dto.parseCreateUser(req.body)       # shape: required fields, types, email syntax
     if input invalid: return mapError(Invalid(input.problems))
@@ -127,10 +128,9 @@ Transport checks only shape and presence: required fields, types, syntax. Transl
 
 **Right** — pure dependency injection, deps passed in:
 ```
-orders.setup(p: Platform, payments: PaymentsService) -> (OrdersService, OrdersTransport)
+orders.setup(p: Platform, payments: PaymentsService) -> OrdersService
   storage = MySQLOrderStorage(p.db)
-  uc      = OrdersService(storage, payments, p.tx, p.clock)
-  return uc, OrdersRestHandler(uc)
+  return OrdersService(storage, payments, p.tx, p.clock)
 ```
 
 **Wrong**
