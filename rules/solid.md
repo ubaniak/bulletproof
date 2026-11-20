@@ -16,7 +16,7 @@ Each layer has one reason to change:
 - **platform** changes when shared infrastructure changes
 
 **Violation signs**
-- service handling both billing and notifications → split into two domains or a coordinator
+- Service handling both billing and notifications → split into two domains or a coordinator
 - storage adapter formatting JSON for an HTTP response → that belongs in transport
 - entity opening DB connections → entity is pure data + invariants
 - one file holding service + storage + transport → split into layers
@@ -26,11 +26,11 @@ Each layer has one reason to change:
 Add a new adapter, never modify existing ones:
 
 - New DB? Add `storage/<newengine>/` + `<newengine>_dto/`. Don't edit `mysql/`.
-- New protocol or API version? Add `transport/<newproto>/` + `<newproto>_dto/`. Don't edit `rest/`.
+- New protocol or API version? Add `transport/<newproto>/<domain>` + `<domain>_dto`. Don't edit `transport/rest/`.
 - New external provider? Add `gateway/<newprovider>/` + `<newprovider>_dto/`. Don't edit `stripe/`.
 - New cross-cutting behaviour? Add a decorator adapter (`storage/cached/`). Don't edit the wrapped adapter.
 
-service depends on the port, so adding adapters never touches business logic.
+Service depends on the port, so adding adapters never touches business logic.
 
 **Violation signs**
 - if/else in service switching on `db.kind == "mysql"`
@@ -48,7 +48,7 @@ Every adapter must be a true substitute for its port:
 Enforced by: the per-port contract suite every adapter must pass (testing.md).
 
 **Violation signs**
-- service tests pass with one adapter and fail with another
+- Service tests pass with one adapter and fail with another
 - docs say "only use `mysql` adapter for X" — a leaked contract; fix the port
 - adapter returns/throws an error type not declared by the domain
 - vendor error or exception types reaching service
@@ -59,12 +59,12 @@ Keep ports small and role-specific. One fat `Repository` port is an anti-pattern
 
 - Split storage by aggregate: `UserStorage`, `OrderStorage`, not `Storage`
 - Split gateway by capability: `PaymentGateway`, `RefundGateway`, not `StripeClient`
-- Split transport by handler group; no god-handler port
+- Split handlers by group; no god-handler
 
-service depends only on the methods it calls.
+Service depends only on the methods it calls.
 
 **Violation signs**
-- service depends on a port with 20 methods and uses 2
+- Service depends on a port with 20 methods and uses 2
 - fakes/mocks with stubs for unused methods
 - adding a method to a port breaks unrelated services
 
@@ -74,13 +74,13 @@ The whole layout exists to enforce this. High-level (service) depends on abstrac
 
 - Ports live with the **consumer** (the domain), not with the adapter
 - Adapters depend on the domain to implement the port
-- service never depends on `storage/mysql` — only on the `storage` port
+- Service never depends on `storage/mysql` — only on the `storage` port
 - `setup` is the only place concrete and abstract meet; `app` is the only place domains meet
 
 **Violation signs**
-- service or entities depend on an IO library or framework (DB driver/ORM, HTTP, vendor SDK, framework annotations)
+- Service or entities depend on an IO library or framework (DB driver/ORM, HTTP, vendor SDK, framework annotations)
 - domain port declared in the adapter's module
-- service receives a connection, client, session, or transaction object
+- Service receives a connection, client, session, or transaction object
 - circular dependency between domain and adapter (port on the wrong side)
 
 ## SOLID review checklist

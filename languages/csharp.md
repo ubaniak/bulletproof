@@ -10,11 +10,14 @@ Either one project with folders + namespaces, or one project per layer when comp
 src/
   Acme.App/                         # Program.cs, composition root
   Acme.Platform/
+  Acme.Transport/                   # inbound adapters: protocol, then domain
+    Rest/Timesheet/  Rest/TimesheetDto/
+    Webhook/Timesheet/  Webhook/TimesheetDto/
+    Cmd/Timesheet/  Cmd/TimesheetDto/
   Acme.Timesheet/                   # PUBLIC: Entities, Errors, ITimesheetService, events, ports
     Entities/  Errors.cs  Ports/  Service/  Setup/
     Storage/MySql/  Storage/MySqlDto/  Storage/Memory/
     Gateway/QuickBooks/  Gateway/QuickBooksDto/
-    Transport/Rest/  Transport/RestDto/  Transport/Webhook/
 ```
 
 ## Ports
@@ -43,7 +46,11 @@ Types.InAssembly(typeof(Timesheet).Assembly)
     .GetResult().IsSuccessful.Should().BeTrue();
 
 Types.InAssembly(typeof(Payroll).Assembly)
-    .ShouldNot().HaveDependencyOnAny("Acme.Timesheet.Storage", "Acme.Timesheet.Gateway", "Acme.Timesheet.Transport")
+    .ShouldNot().HaveDependencyOnAny("Acme.Timesheet.Storage", "Acme.Timesheet.Gateway", "Acme.Timesheet.Setup", "Acme.Transport")
+    .GetResult().IsSuccessful.Should().BeTrue();
+
+Types.InAssembly(typeof(Acme.Transport.Rest.Timesheet.TimesheetEndpoints).Assembly)   // transport uses only each domain's public API
+    .ShouldNot().HaveDependencyOnAny("Acme.Timesheet.Storage", "Acme.Timesheet.Gateway", "Acme.Timesheet.Setup")
     .GetResult().IsSuccessful.Should().BeTrue();
 ```
 
@@ -71,7 +78,11 @@ Explicit `Ctx` parameter (preferred, carries `CancellationToken`), or `AsyncLoca
 ## Transactions
 
 ```csharp
-public interface ITxManager { Task<T> WithinTx<T>(Ctx ctx, Func<Ctx, Task<T>> work); }
+public interface ITxManager
+{
+    Task<T> WithinTx<T>(Ctx ctx, Func<Ctx, Task<T>> work);
+    Ctx Detached(Ctx ctx);   // same ctx without the active transaction
+}
 ```
 Adapter implemented with EF Core `Database.BeginTransactionAsync` or `TransactionScope`; `DbContext` lives only in storage adapters.
 

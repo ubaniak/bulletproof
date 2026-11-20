@@ -9,6 +9,10 @@ src/
   main.ts                         # load config, app.run()
   app/app.ts
   platform/{config,logger,db,tx,errors,context,clock}.ts
+  transport/                      # inbound adapters: protocol, then domain
+    rest/timesheet/  rest/timesheet-dto/
+    webhook/timesheet/  webhook/timesheet-dto/
+    cmd/timesheet/  cmd/timesheet-dto/
   timesheet/
     index.ts                      # PUBLIC API: re-exports entities, errors, Service type, events
     entities/timesheet.ts
@@ -17,14 +21,12 @@ src/
     gateway.ts
     publisher.ts
     service.ts                   # Service port + implementation
-    transport.ts
     setup.ts
     storage/mysql/  storage/mysql-dto/  storage/memory/  storage/contract.ts
     gateway/quickbooks/  gateway/quickbooks-dto/
-    transport/rest/  transport/rest-dto/  transport/webhook/  transport/webhook-dto/
 ```
 
-Other domains import only `@/timesheet` (the `index.ts`), never deep paths.
+Other domains and `transport/**` import only `@/timesheet` (the `index.ts`), never deep paths.
 
 ## Ports
 
@@ -46,30 +48,34 @@ Use `interface`/`type`, not abstract classes. Declared in the domain.
 
 ## Boundary lint
 
-`eslint-plugin-boundaries` (sketch):
+`dependency-cruiser` (`.dependency-cruiser.cjs`, rules are path regexes; `$1`/`$2` refer to groups captured in `from`):
 ```js
-settings: {
-  "boundaries/elements": [
-    { type: "platform", pattern: "src/platform/*" },
-    { type: "app",      pattern: "src/app/*" },
-    { type: "public",   pattern: "src/*/index.ts", mode: "file", capture: ["domain"] },
-    { type: "core",     pattern: "src/*/(entities|errors.ts|service.ts|storage.ts|gateway.ts|publisher.ts|transport.ts)", capture: ["domain"] },
-    { type: "adapter",  pattern: "src/*/(storage|gateway|transport)/*", capture: ["domain"] },
-    { type: "setup",    pattern: "src/*/setup.ts", mode: "file", capture: ["domain"] },
+const DOMAIN = "^src/(?!platform/|app/|transport/)([^/]+)/";
+module.exports = {
+  options: { tsConfig: { fileName: "tsconfig.json" }, tsPreCompilationDeps: true, doNotFollow: { path: "node_modules" } },
+  forbidden: [
+    { name: "platform-depends-on-no-domain", severity: "error",
+      from: { path: "^src/platform/" }, to: { path: "^src/(?!platform/)" } },
+    { name: "domains-use-only-others-public-api", severity: "error",
+      from: { path: DOMAIN },
+      to: { path: "^src/(?!platform/|app/|transport/)(?!$1/)[^/]+/", pathNot: "^src/[^/]+/index\\.ts$" } },
+    { name: "no-domain-depends-on-transport", severity: "error",
+      from: { path: DOMAIN }, to: { path: "^src/transport/" } },
+    { name: "transport-uses-own-domain-public-api-only", severity: "error",
+      from: { path: "^src/transport/[^/]+/([^/]+?)(-dto)?/" },
+      to: { path: "^src/(?!platform/|transport/)", pathNot: "^src/$1/index\\.ts$" } },
+    { name: "transports-do-not-depend-on-each-other", severity: "error",
+      from: { path: "^src/transport/([^/]+)/([^/]+?)(-dto)?/" },
+      to: { path: "^src/transport/", pathNot: "^src/transport/$1/$2(-dto)?/" } },
+    { name: "entities-and-service-import-no-io", severity: "error",
+      from: { path: "^src/[^/]+/(entities/|service\\.ts$)" },
+      to: { dependencyTypes: ["npm"], path: "^node_modules/(pg|mysql2|@?prisma|typeorm|axios|express|@nestjs|stripe)/" } },
   ],
-},
-rules: {
-  "boundaries/element-types": ["error", { default: "disallow", rules: [
-    { from: "platform", allow: [] },
-    { from: "core",    allow: ["platform", ["core", { domain: "${from.domain}" }], "public"] },
-    { from: "adapter", allow: ["platform", ["core", { domain: "${from.domain}" }]] },
-    { from: "setup",   allow: ["platform", ["core", { domain: "${from.domain}" }], ["adapter", { domain: "${from.domain}" }], "public"] },
-    { from: "app",     allow: ["platform", "public", "setup"] },
-  ]}],
-  "no-restricted-imports": ["error", { patterns: ["@/*/storage/*", "@/*/gateway/*", "@/*/transport/*"] }],
-}
+};
 ```
-Add an override for `entities/**` and `service.ts` restricting `pg`, `mysql2`, `prisma`, `typeorm`, `axios`, `express`, `@nestjs/*`, vendor SDKs. `dependency-cruiser` is an equivalent alternative.
+Run `depcruise src --config .dependency-cruiser.cjs` in CI. Extend the IO list with your own drivers and vendor SDKs. `app/` and `<domain>/setup.ts` are unrestricted by these rules; `app` may import any domain's `setup`, and nothing else may (rule 2 blocks other domains, rule 4 blocks transports).
+
+`eslint-plugin-boundaries` is an alternative, but its current element descriptors classify folders only, so single-file units (`index.ts`, `service.ts`, `setup.ts`) are silently left unchecked. If you use it, make each unit a folder first, and confirm with a deliberate violation that the rule fires.
 
 ## Errors
 
@@ -93,7 +99,7 @@ export function translateError(e: unknown): DomainError {
 }
 ```
 
-`Result` types (neverthrow, Effect) are fine if used consistently; the same kinds apply. Transport: one error handler/middleware per transport mapping `kind` → status.
+`Result` types (neverthrow, Effect) are fine if used consistently; the same kinds apply. Transport: one error handler/middleware per protocol (in `platform/rest`, registered in `app`) mapping `kind` → status.
 
 ## Context
 
@@ -102,7 +108,10 @@ Either an explicit `ctx: Ctx` first parameter (preferred: visible and testable) 
 ## Transactions
 
 ```ts
-export interface TxManager { withinTx<T>(ctx: Ctx, work: (ctx: Ctx) => Promise<T>): Promise<T>; }
+export interface TxManager {
+  withinTx<T>(ctx: Ctx, work: (ctx: Ctx) => Promise<T>): Promise<T>;
+  detached(ctx: Ctx): Ctx;   // same ctx without the active transaction
+}
 ```
 The adapter puts the driver/ORM transaction into ctx (or ALS); storage adapters read it. Prisma `$transaction`, Knex `transaction`, TypeORM `QueryRunner` live only in the adapter.
 
@@ -122,7 +131,7 @@ Manual constructor injection in `setup.ts`. DI containers (tsyringe, Inversify) 
 
 - Files `kebab-case.ts`, types/classes `PascalCase`, translator folders `<impl>-dto`.
 - `strict: true`, `noUncheckedIndexedAccess`; no `any` in domain code.
-- Biome or ESLint + Prettier, boundaries plugin, `tsc --noEmit` in CI; pnpm/npm with lockfile and exact versions; husky + lint-staged.
+- Biome or ESLint + Prettier, `dependency-cruiser`, `tsc --noEmit` in CI; pnpm/npm with lockfile and exact versions; husky + lint-staged.
 
 ## Traps
 

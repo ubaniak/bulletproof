@@ -7,6 +7,7 @@ When one service writes through several storage ports atomically, use a transact
 ```
 port TxManager                                  # declared in platform
   withinTx(ctx, work: fn(ctx) -> T) -> T
+  detached(ctx) -> ctx                          # same ctx with the active transaction removed
 
 service.approve(ctx, id)
   tx.withinTx(ctx, fn(ctx):
@@ -26,7 +27,21 @@ Framework transaction helpers are fine **inside** the `TxManager` adapter.
 
 ## consistency-one-domain-per-tx
 
-A database transaction never spans two domains. If A's service calls B's service inside A's `withinTx`, B must not join that transaction. Cross-domain consistency is eventual, via events.
+A database transaction never spans two domains. Because the active transaction travels in ctx and storage adapters pick it up from there, B would silently join A's transaction by default. So when A's service must call B's service inside A's `withinTx`, it passes `tx.detached(ctx)`; B then runs in its own transaction or none. Prefer not to call B inside A's transaction at all: do it after commit, or publish an event (`consistency-outbox`). Cross-domain consistency is eventual, via events.
+
+**Wrong**
+```
+tx.withinTx(ctx, fn(ctx):
+  orders.save(ctx, order)
+  payments.charge(ctx, order)           # ctx carries orders' tx; payments' storage joins it
+```
+
+**Right**
+```
+tx.withinTx(ctx, fn(ctx):
+  orders.save(ctx, order)
+  publisher.publish(ctx, OrderPlaced(order.id))   # payments reacts after commit
+```
 
 ## consistency-outbox
 
@@ -34,7 +49,7 @@ Side effects that must happen after a commit — notifying another domain, calli
 
 1. In the same transaction as the state change, service calls `publisher.publish(ctx, event)`; the adapter writes to an `outbox` table.
 2. A relay (worker registered in `app/`) reads the outbox and delivers to the bus or invokes the target.
-3. Consumers are transports (`transport/consumer`) that call their own service.
+3. Consumers are transports (`transport/consumer/<domain>`) that call their own domain's service.
 
 **Wrong**
 ```

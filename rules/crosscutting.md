@@ -46,15 +46,16 @@ Order is decided in `app/` and is the same for every domain's routes.
 
 ## crosscutting-async-transports
 
-REST and gRPC are not the only inbound ports. These are all transports with their own `<impl>` + translator, following every transport rule (shape-only validation, call service, map errors):
+REST and gRPC are not the only transports. These are all transports, one folder per domain with its own translator, following every transport rule (shape-only validation, call service, map errors):
 
 ```
-X/transport/
-    rest       rest_dto
-    grpc       grpc_dto
-    consumer   consumer_dto    # queue/topic messages
-    webhook    webhook_dto     # inbound third-party callbacks (Stripe, QuickBooks)
-    cron                       # scheduled triggers; usually no translator
+transport/
+    rest/X       rest/X_dto
+    cmd/X        cmd/X_dto          # CLI commands
+    grpc/X       grpc/X_dto
+    consumer/X   consumer/X_dto     # queue/topic messages
+    webhook/X    webhook/X_dto      # inbound third-party callbacks (Stripe, QuickBooks)
+    cron/X                          # scheduled triggers; usually no translator
 ```
 
 - Webhook transports verify signatures, extract the idempotency key, translate the payload, call service. No sync logic in the handler.

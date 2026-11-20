@@ -8,6 +8,10 @@ How to express the rules in `rules/` idiomatically in Go. Rules win over anythin
 cmd/api/main.go                 # load config, app.Run
 app/app.go
 platform/{config,log,db,tx,errs,ctxkeys,clock}/
+transport/                      # inbound adapters: protocol, then domain
+    rest/timesheet/             rest/timesheet_dto/
+    webhook/timesheet/          webhook/timesheet_dto/
+    cmd/timesheet/              cmd/timesheet_dto/      # CLI commands
 timesheet/
     entities/timesheet.go
     errors.go
@@ -15,18 +19,15 @@ timesheet/
     gateway.go
     publisher.go
     service.go                 # Service port + impl
-    transport.go
     setup.go
     internal/
         storage/mysql/            storage/mysql_dto/
         storage/memory/
         storage/contract/         # contract suite (test helper)
         gateway/quickbooks/       gateway/quickbooks_dto/
-        transport/rest/           transport/rest_dto/
-        transport/webhook/        transport/webhook_dto/
 ```
 
-Adapters live under `internal/` so only `timesheet` (and its `setup`) can import them.
+Storage and gateway adapters live under `internal/` so only `timesheet` (and its `setup`) can import them. Transports live outside the domain, so they can import only what `timesheet` exports: `Service`, entities, errors.
 
 ## Ports
 
@@ -55,16 +56,20 @@ workdir: .
 components:
   platform: { in: platform/** }
   app:      { in: app/** }
-  domain:   { in: "*" }                     # domain root packages
-  entities: { in: "*/entities" }
-  adapters: { in: "*/internal/**" }
+  transport: { in: transport/** }
+  domain:   { in: [timesheet, payroll] }    # list domain root packages explicitly; "*" would overlap app, platform, transport
+  entities: { in: [timesheet/entities, payroll/entities] }
+  adapters: { in: [timesheet/internal/**, payroll/internal/**] }
 deps:
   platform: { mayDependOn: [] }
   entities: { mayDependOn: [platform] }
   domain:   { mayDependOn: [platform, entities, domain] }
   adapters: { mayDependOn: [platform, entities, domain] }
-  app:      { mayDependOn: [platform, domain, entities] }
+  transport: { mayDependOn: [platform, entities, domain] }   # domain = public root package only (internal/ is unreachable)
+  app:      { mayDependOn: [platform, transport, domain, entities] }
 ```
+
+This is a sketch: shared components cannot say "a transport may import only *its own* domain". Enforce that by giving each domain its own components (`timesheet`, `timesheet_transport`, ...) or in review, and add each new domain to the lists above.
 
 `golangci-lint` with `depguard` to deny IO packages in domain root and entities:
 ```yaml
@@ -106,7 +111,7 @@ func TranslateError(err error) error {
 }
 ```
 
-Transport: one `writeError(w, err)` per handler package that switches on `Kind`.
+Transport: one `writeError(w, err)` per protocol in `platform/rest` that switches on `Kind`; every `transport/rest/<domain>` handler calls it.
 
 ## Context
 
@@ -117,21 +122,25 @@ Transport: one `writeError(w, err)` per handler package that switches on `Kind`.
 ```go
 type TxManager interface {
     WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
+    Detached(ctx context.Context) context.Context   // ctx without the active *sql.Tx
 }
 ```
-The adapter stores `*sql.Tx` in ctx; storage adapters call `db.Conn(ctx)` which returns the tx if present. service never sees `*sql.Tx`.
+The adapter stores `*sql.Tx` in ctx; storage adapters call `db.Conn(ctx)` which returns the tx if present. The service never sees `*sql.Tx`.
 
 ## Wiring
 
 Manual constructor injection. No DI framework needed. `wire`/`fx` are acceptable only inside `setup`/`app`.
 
 ```go
-func Setup(p *platform.Platform, payments payments.Service) (Service, Transport) {
+func Setup(p *platform.Platform, payments payments.Service) Service {
     var store Storage = mysql.New(p.DB)
     store = cached.New(store, p.Cache)
-    uc := newService(store, payments, p.Tx, p.Clock)
-    return uc, rest.NewHandler(uc)
+    return newService(store, payments, p.Tx, p.Clock)
 }
+
+// app/app.go
+svc := timesheet.Setup(p, paymentsSvc)
+mux.Handle("/v1/timesheets", timesheetrest.NewHandler(svc))   // transport/rest/timesheet
 ```
 
 ## Testing

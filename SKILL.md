@@ -1,6 +1,6 @@
 ---
 name: bulletproof
-description: Bulletproof domain-driven backend architecture with enforced SOLID design, for any backend language (Go, TypeScript, Python, Java/Kotlin, C#, ...). Use when scaffolding a new domain or service, reviewing layering/import boundaries, placing a file, designing errors, transactions, events, auth, tests, or API conventions for a backend, or when the user mentions "bulletproof", "domain layout", "service", "gateway", "storage adapter", "transport", "port", "adapter", "composition root", "SOLID", "SRP", "DIP", or asks how to structure a backend service.
+description: Bulletproof domain-driven backend architecture with enforced SOLID design, for any backend language (Go, TypeScript, Python, Java/Kotlin, C#, ...). Use when scaffolding a new domain or backend service, reviewing layering/import boundaries, placing a file, designing errors, transactions, events, auth, tests, or API conventions for a backend, or when the user mentions "bulletproof", "domain layout", "service layer", "service port", "gateway", "storage adapter", "transport", "port", "adapter", "composition root", "SOLID", "SRP", "DIP", or asks how to structure a backend service.
 ---
 
 # Bulletproof Backend Architecture
@@ -30,11 +30,12 @@ No match: apply the rules using the pseudocode in `rules/`, and name the closest
 | **domain** | A module with one purpose and one public surface |
 | **entity** | Domain type + invariants; no IO |
 | **port** | Abstract contract declared *by the domain* (interface, protocol, abstract class, trait, function type) |
-| **adapter** | Concrete implementation of a port (`storage/<impl>`, `gateway/<impl>`, `transport/<impl>`) |
-| **translator** (`<impl>_dto`) | Converts between an adapter's native format (row, vendor payload, wire message) and entities/domain errors |
+| **adapter** | Concrete implementation of a port (`<domain>/storage/<impl>`, `<domain>/gateway/<impl>`), or, for inbound traffic, a transport that calls the domain's `service` port |
+| **translator** (`<impl>_dto`) | Converts between an adapter's native format (row, vendor payload, wire message) and entities/domain errors; a transport's sibling is `<domain>_dto` |
+| **transport** | Inbound adapters for one protocol (`transport/rest`, `transport/cmd`, `transport/grpc`, ...), one folder per domain: `transport/<protocol>/<domain>`. Lives beside `platform`, not inside a domain |
 | **service** | Business rules and orchestration; depends only on ports |
 | **setup** | Per-domain composition root: builds the domain's object graph |
-| **app** | Process composition root: builds platform, calls every setup, mounts transports, owns lifecycle |
+| **app** | Process composition root: builds platform, calls every setup, builds and mounts transports, owns lifecycle |
 | **platform** | Shared kernel of infrastructure primitives; depends on no domain |
 | **ctx** | Request context: principal, tenant, request/trace ID, active transaction, cancellation |
 | **domain error** | Typed failure with a **kind** (Invalid, NotFound, Conflict, ...) and a stable code — expressed as error values, exceptions, or `Result` depending on language |
@@ -47,6 +48,9 @@ No match: apply the rules using the pseudocode in `rules/`, and name the closest
 app/                          # composition root: routes, middleware, workers, startup/shutdown
 platform/                     # config, logger, tracer, db pool, tx manager, clock, id generator,
                               # error kinds, ctx helpers. Depends on NO domain.
+transport/                    # inbound adapters: protocol first, then domain
+    <protocol>/<domain>       # handler (rest, cmd, grpc, consumer, webhook, cron)
+    <protocol>/<domain>_dto   # request AND response wire <-> entity translator
 <domain>/
     entities                  # domain types + invariants, no IO
     errors                    # domain errors (public API)
@@ -58,32 +62,34 @@ platform/                     # config, logger, tracer, db pool, tx manager, clo
     gateway/<impl>_dto        # vendor wire <-> entity translator
     publisher                 # port for outbound domain events (optional)
     service                   # port + implementation — business rules only
-    transport                 # port
-    transport/<impl>          # handler (rest, grpc, consumer, webhook, cron)
-    transport/<impl>_dto      # request AND response wire <-> entity translator
-    setup                     # wires this domain; returns (service, transport)
+    setup                     # wires this domain; returns the service
 ```
 
 Each entry is a **unit of code ownership**: it may be a directory, package, module, namespace, or file, as the language file specifies. What is fixed:
 
 - Ports sit at the domain root; adapters and translators sit beneath their port.
-- Every adapter `<impl>` has a sibling translator `<impl>_dto` (casing per language file).
-- The business layer is always called **service**. Use that one name everywhere (no `useCase`, `manager`, or `handler` for it).
+- Every adapter `<impl>` has a sibling translator `<impl>_dto` (casing per language file). A transport `transport/<protocol>/<domain>` has the sibling `transport/<protocol>/<domain>_dto`.
+- Transport is **not** part of a domain. It sits at the root beside `platform/` and `app/`, grouped by protocol and then by domain (`transport/rest/<domain>`, `transport/cmd/<domain>`).
+- The business layer is always called **service**. Use that one name everywhere (no `useCase`, `manager`, or `handler` for it). In this skill `service` means only that layer: never a deployable, a DI-registered object in general, or a framework stereotype (`@Service`, `IServiceCollection`).
 - A domain's **public API** is exactly: `entities`, `errors`, the `service` port (and published event types). Everything else must be made unreachable from outside the domain by the language's visibility rules or a boundary linter.
 
 ## Dependency direction
 
 ```
-            app ──▶ <domain>/setup ──▶ adapters (storage/<impl>, gateway/<impl>, transport/<impl>)
-                                         │ implement
-transport ──▶ service ──▶ storage | gateway | publisher (ports) ──▶ entities, errors
-                 │
-                 └──▶ other domain's service port / entities / errors
+            app ──▶ <domain>/setup ──▶ adapters (storage/<impl>, gateway/<impl>)
+             │                             │ implement
+             │
+             └──▶ transport/<protocol>/<domain>
+                          │ calls
+                          ▼
+                  <domain> service ──▶ storage | gateway | publisher (ports) ──▶ entities, errors
+                          │
+                          └──▶ other domain's service port / entities / errors
 
 platform ◀── usable by everyone; depends on nothing above it
 ```
 
-Ports are declared by the consumer (the domain). Adapters depend on the domain to implement them. `setup` is the only place concrete and abstract meet; `app` is the only place domains meet each other.
+Ports are declared by the consumer (the domain). Adapters depend on the domain to implement them. A transport depends only on its own domain's public API (`entities`, `errors`, `service` port) and `platform`; no domain depends on a transport. `setup` is the only place concrete and abstract meet; `app` is the only place domains and transports meet each other.
 
 ## Framework rule
 
@@ -91,7 +97,7 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 
 - Framework annotations, decorators, base classes, and request/response types are allowed in **transport, adapters, setup, app** only.
 - **Never** in entities or service: no `@Transactional`, `@Injectable`, ORM model base classes, `Request`/`Response` objects, or framework exceptions.
-- DI containers are configured only in `setup`/`app`. service gets its ports via constructor/parameters, never by looking them up.
+- DI containers are configured only in `setup`/`app`. A service gets its ports via constructor/parameters, never by looking them up.
 
 ## Rules by priority
 
@@ -110,6 +116,7 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 ### 1. Boundaries & structure (CRITICAL) — [rules/structure.md](rules/structure.md)
 - `structure-cross-domain-imports` — Domain A may depend only on B's `entities`, `errors`, `service` port.
 - `structure-public-api` — Each domain exposes one public surface; everything else is unreachable from outside.
+- `structure-transport-layer` — Transport lives in top-level `transport/<protocol>/<domain>`, not inside a domain; it depends only on its own domain's public API and `platform`.
 - `structure-platform-layer` — Infrastructure primitives live in `platform/`; platform depends on no domain.
 - `structure-app-root` — `app/` is the single composition root: routes, middleware, lifecycle.
 - `structure-data-ownership` — A domain owns its tables and migrations. No cross-domain joins or table reads.
@@ -129,12 +136,12 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 - `errors-domain-defined` — Each domain declares its errors with a kind and stable code.
 - `errors-adapters-translate` — Adapters translate vendor/driver failures into domain errors; vendor error types never reach service.
 - `errors-service-decides` — Retry/fallback/compensation decisions live in service, made on domain errors.
-- `errors-transport-maps` — Each transport maps domain errors to protocol responses in exactly one place.
+- `errors-transport-maps` — Each protocol maps domain errors to responses in exactly one place (`platform/<protocol>`), shared by all domains.
 - `errors-expected-vs-unexpected` — Expected errors are control flow; unexpected errors are logged once at the boundary.
 
 ### 4. Consistency (HIGH) — [rules/consistency.md](rules/consistency.md)
 - `consistency-tx-port` — Transactions via a `TxManager` port; service never holds a connection/session/transaction object.
-- `consistency-one-domain-per-tx` — A DB transaction never spans domains.
+- `consistency-one-domain-per-tx` — A DB transaction never spans domains; cross-domain calls inside a transaction use `tx.detached(ctx)` or move to an event.
 - `consistency-outbox` — Post-commit side effects (other domains, third parties) go through an outbox.
 - `consistency-idempotency` — Every retryable inbound entry point is idempotent.
 
@@ -183,18 +190,20 @@ When creating a new domain `X` (concrete file names and syntax from the language
 6. `X/gateway/<impl>` + `<impl>_dto` — implement; translate vendor payloads and failures.
 7. `X/publisher` (if X emits events) — port; adapter writes to the outbox.
 8. `X/service` — port + implementation; receives only ports.
-9. `X/transport` + `X/transport/<impl>` + `<impl>_dto` — handlers receive the service port; one error-mapping function per transport.
-10. `X/setup` — build the concrete graph from injected platform deps; return `(service, transport)`.
+9. `X/setup` — build the concrete graph from injected platform deps; return the service.
+10. `transport/<protocol>/X` + `transport/<protocol>/X_dto` for each protocol X is exposed on (`rest`, `cmd`, ...) — handlers receive the service port; handlers call the shared `platform/<protocol>` error mapper rather than writing their own.
 11. Tests: service with fakes, contract suite per port (run against every adapter incl. the fake), transport mapping tests.
 12. Migrations for X's tables owned by X.
-13. Register X in `app/` (call setup, mount transport). Add X to the boundary-lint config.
+13. Register X in `app/` (call setup, build each transport with the service, mount it). Add X to the boundary-lint config.
 
 ## Review checklist
 
 Flag:
 
 **Boundaries**
-- Domain depending on another domain's `storage`, `gateway`, `transport`, `setup`, or translators
+- Domain depending on another domain's `storage`, `gateway`, `setup`, or translators
+- Domain depending on anything under `transport/`; transport depending on another domain's public API, on a domain's `storage`/`gateway`/`setup`, or on another transport
+- Transport code placed inside a domain folder
 - Domain reading or joining another domain's tables
 - `platform/` depending on a domain
 - Routes/middleware registered outside `app/`; service constructed in the entrypoint instead of `setup`
@@ -202,9 +211,9 @@ Flag:
 
 **Layers**
 - Translator types in service signatures or entities
-- service or entities depending on any IO library or framework type (DB driver/ORM, HTTP, broker SDK, vendor SDK, framework annotations)
-- service receiving a connection, client, session, or transaction object instead of a port
-- service depending on a concrete adapter instead of a port
+- Service or entities depending on any IO library or framework type (DB driver/ORM, HTTP, broker SDK, vendor SDK, framework annotations)
+- Service receiving a connection, client, session, or transaction object instead of a port
+- Service depending on a concrete adapter instead of a port
 - Storage method names encoding business rules (`getEligibleUsers`)
 - Gateway making retry/fallback decisions based on business meaning
 - Transport doing domain validation (approved email domains, plan limits)
@@ -223,7 +232,7 @@ Flag:
 
 **Tests**
 - New adapter not run against its port's contract suite
-- service test requiring a real DB or network
+- Service test requiring a real DB or network
 
 ## Anti-patterns
 
@@ -248,7 +257,7 @@ Flag:
 | gateway | 3rd-party port | outbound | external IO |
 | publisher | event port | outbound | emitted events |
 | service | business logic | center | rules, authz, retries |
-| transport | inbound port | inbound | protocol IO, error mapping |
+| transport | inbound adapter (top-level, per protocol and domain) | inbound | protocol IO, error mapping |
 | setup | domain wiring | — | domain graph |
 | app | composition root | — | process lifecycle |
 

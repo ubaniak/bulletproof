@@ -2,7 +2,7 @@
 
 ## structure-cross-domain-imports
 
-Domain A may depend only on B's `entities`, `errors`, and `service` port. Never B's `storage`, `gateway`, `transport`, `setup`, or any translator.
+Domain A may depend only on B's `entities`, `errors`, and `service` port. Never B's `storage`, `gateway`, `setup`, or any translator. No domain depends on `transport/` at all.
 
 **Wrong**
 ```
@@ -23,7 +23,36 @@ service OrdersService(payments: PaymentsService, ...)   # injected by app/
 
 ## structure-public-api
 
-A domain's public surface is exactly `entities`, `errors`, the `service` port, and any published event types. Everything else must be **unreachable** from outside the domain — by the language's visibility rules where possible, otherwise by a boundary linter in CI. If neither the compiler nor a linter stops it, the rule will be broken. See the language file for the mechanism.
+A domain's public surface is exactly `entities`, `errors`, the `service` port, and any published event types. Transports consume this surface and nothing else. Everything else must be **unreachable** from outside the domain — by the language's visibility rules where possible, otherwise by a boundary linter in CI. If neither the compiler nor a linter stops it, the rule will be broken. See the language file for the mechanism.
+
+## structure-transport-layer
+
+Transport is not part of a domain. It sits at the project root beside `platform/` and `app/`, grouped by protocol and then by domain:
+
+```
+transport/
+    rest/<domain>       rest/<domain>_dto
+    cmd/<domain>        cmd/<domain>_dto        # CLI commands
+    grpc/<domain>       grpc/<domain>_dto
+    consumer/<domain>   webhook/<domain>   cron/<domain>   ...
+```
+
+- `transport/<protocol>/<domain>` may depend on `platform` and **that domain's public API only** (`entities`, `errors`, `service` port). It never touches `storage`, `gateway`, `setup`, or another domain.
+- A handler that needs several domains belongs to a coordinator domain's transport (see Application coordinators), not to one that reaches across.
+- No domain depends on `transport/`. Deleting `transport/` must leave every domain compiling and its tests green.
+- Transports do not depend on each other. Shared wire primitives for a protocol (error mapper, error envelope, pagination shape, middleware primitives) live in `platform/<protocol>`, e.g. `platform/rest`; they know error kinds, never domains.
+- An endpoint or command that composes several domains (a dashboard, a combined view) belongs to a **coordinator domain** with its own `transport/<protocol>/<coordinator>`. A thin, read-only coordinator that owns no tables is expected and fine; the alternative is a transport reaching across domains, which is not allowed.
+- Adding a protocol or a domain's exposure means adding a folder under `transport/`; no domain changes.
+
+**Wrong**
+```
+orders/transport/rest        # transport inside the domain
+```
+
+**Right**
+```
+transport/rest/orders        # depends on orders' service port, entities, errors, platform
+```
 
 ## structure-platform-layer
 
@@ -35,7 +64,7 @@ A domain's public surface is exactly `entities`, `errors`, the `service` port, a
 - clock, ID generator
 - error kinds (`Invalid`, `NotFound`, `Conflict`, `Unauthorized`, `Forbidden`, `RateLimited`, `Unavailable`, `Internal`)
 - ctx helpers (principal, tenant, request ID)
-- server plumbing, middleware primitives
+- server plumbing, middleware primitives, and per-protocol wire primitives (`platform/rest`: error mapper, error envelope, pagination shape)
 
 Rules:
 - `platform/` **never** depends on a domain.
@@ -49,18 +78,18 @@ Rules:
 ```
 app.run(config):
   p = platform.build(config)                        # db, logger, tx, clock, ...
-  paymentsUC, paymentsT = payments.setup(p, config.stripe)
-  ordersUC,   ordersT   = orders.setup(p, paymentsUC)
+  paymentsSvc = payments.setup(p, config.stripe)
+  ordersSvc   = orders.setup(p, paymentsSvc)
 
   server = p.httpServer(middleware: [recover, requestId, logging, authn(p.auth)])
-  server.mount("/v1/payments", paymentsT)
-  server.mount("/v1/orders",   ordersT)
+  server.mount("/v1/payments", transport.rest.payments.handler(paymentsSvc))
+  server.mount("/v1/orders",   transport.rest.orders.handler(ordersSvc))
   server.run()                                      # owns graceful shutdown
 ```
 
 - Route prefixes, middleware order, server start/stop, worker pools, and consumer subscriptions are decided here.
-- Per-domain `setup` builds the domain; `app` decides how the process exposes it.
-- The entrypoint only loads config and calls `app.run`. Multiple processes (api, worker) share `app` helpers but mount different transports.
+- Per-domain `setup` builds the domain and returns its service; `app` decides how the process exposes it by building each `transport/<protocol>/<domain>` handler from that service.
+- The entrypoint only loads config and calls `app.run`. Multiple processes (api, worker, cli) share `app` helpers but mount different transports (`transport/rest`, `transport/consumer`, `transport/cmd`).
 - With a DI container, `app/` and `setup` are the only places that register or resolve components.
 
 ## structure-data-ownership
