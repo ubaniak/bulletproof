@@ -115,6 +115,10 @@ export interface TxManager {
 ```
 The adapter puts the driver/ORM transaction into ctx (or ALS); storage adapters read it. Prisma `$transaction`, Knex `transaction`, TypeORM `QueryRunner` live only in the adapter.
 
+## Contracts & codegen (optional)
+
+`api/` + `gen/` at the repo root. `openapi-typescript` (or `orval`) for OpenAPI, `@bufbuild/protobuf` with `buf` for protobuf; `buf breaking` and `oasdiff` in CI. Extend the `dependency-cruiser` rules so only `src/transport/**`, `src/*/gateway/**`, and publisher/consumer adapters may import `gen/`. Drift check: `npm run gen && git diff --exit-code`.
+
 ## Wiring
 
 Manual constructor injection in `setup.ts`. DI containers (tsyringe, Inversify) only in `setup`/`app`.
