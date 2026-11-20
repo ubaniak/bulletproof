@@ -1,6 +1,6 @@
 ---
 name: bulletproof
-description: Bulletproof domain-driven backend architecture with enforced SOLID design, for any backend language (Go, TypeScript, Python, Java/Kotlin, C#, ...). Use when scaffolding a new domain or service, reviewing layering/import boundaries, placing a file, designing errors, transactions, events, auth, tests, or API conventions for a backend, or when the user mentions "bulletproof", "domain layout", "useCase", "gateway", "storage adapter", "transport", "port", "adapter", "composition root", "SOLID", "SRP", "DIP", or asks how to structure a backend service.
+description: Bulletproof domain-driven backend architecture with enforced SOLID design, for any backend language (Go, TypeScript, Python, Java/Kotlin, C#, ...). Use when scaffolding a new domain or service, reviewing layering/import boundaries, placing a file, designing errors, transactions, events, auth, tests, or API conventions for a backend, or when the user mentions "bulletproof", "domain layout", "service", "gateway", "storage adapter", "transport", "port", "adapter", "composition root", "SOLID", "SRP", "DIP", or asks how to structure a backend service.
 ---
 
 # Bulletproof Backend Architecture
@@ -32,7 +32,7 @@ No match: apply the rules using the pseudocode in `rules/`, and name the closest
 | **port** | Abstract contract declared *by the domain* (interface, protocol, abstract class, trait, function type) |
 | **adapter** | Concrete implementation of a port (`storage/<impl>`, `gateway/<impl>`, `transport/<impl>`) |
 | **translator** (`<impl>_dto`) | Converts between an adapter's native format (row, vendor payload, wire message) and entities/domain errors |
-| **useCase** | Business rules and orchestration; depends only on ports |
+| **service** | Business rules and orchestration; depends only on ports |
 | **setup** | Per-domain composition root: builds the domain's object graph |
 | **app** | Process composition root: builds platform, calls every setup, mounts transports, owns lifecycle |
 | **platform** | Shared kernel of infrastructure primitives; depends on no domain |
@@ -57,28 +57,28 @@ platform/                     # config, logger, tracer, db pool, tx manager, clo
     gateway/<impl>            # adapter (stripe, quickbooks, ...)
     gateway/<impl>_dto        # vendor wire <-> entity translator
     publisher                 # port for outbound domain events (optional)
-    useCase                   # port + implementation — business rules only
+    service                   # port + implementation — business rules only
     transport                 # port
     transport/<impl>          # handler (rest, grpc, consumer, webhook, cron)
     transport/<impl>_dto      # request AND response wire <-> entity translator
-    setup                     # wires this domain; returns (useCase, transport)
+    setup                     # wires this domain; returns (service, transport)
 ```
 
 Each entry is a **unit of code ownership**: it may be a directory, package, module, namespace, or file, as the language file specifies. What is fixed:
 
 - Ports sit at the domain root; adapters and translators sit beneath their port.
 - Every adapter `<impl>` has a sibling translator `<impl>_dto` (casing per language file).
-- The business layer is always called **useCase**. Do not mix `service` and `useCase`.
-- A domain's **public API** is exactly: `entities`, `errors`, the `useCase` port (and published event types). Everything else must be made unreachable from outside the domain by the language's visibility rules or a boundary linter.
+- The business layer is always called **service**. Use that one name everywhere (no `useCase`, `manager`, or `handler` for it).
+- A domain's **public API** is exactly: `entities`, `errors`, the `service` port (and published event types). Everything else must be made unreachable from outside the domain by the language's visibility rules or a boundary linter.
 
 ## Dependency direction
 
 ```
             app ──▶ <domain>/setup ──▶ adapters (storage/<impl>, gateway/<impl>, transport/<impl>)
                                          │ implement
-transport ──▶ useCase ──▶ storage | gateway | publisher (ports) ──▶ entities, errors
+transport ──▶ service ──▶ storage | gateway | publisher (ports) ──▶ entities, errors
                  │
-                 └──▶ other domain's useCase port / entities / errors
+                 └──▶ other domain's service port / entities / errors
 
 platform ◀── usable by everyone; depends on nothing above it
 ```
@@ -90,8 +90,8 @@ Ports are declared by the consumer (the domain). Adapters depend on the domain t
 Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are adapters.
 
 - Framework annotations, decorators, base classes, and request/response types are allowed in **transport, adapters, setup, app** only.
-- **Never** in entities or useCase: no `@Transactional`, `@Injectable`, ORM model base classes, `Request`/`Response` objects, or framework exceptions.
-- DI containers are configured only in `setup`/`app`. useCase gets its ports via constructor/parameters, never by looking them up.
+- **Never** in entities or service: no `@Transactional`, `@Injectable`, ORM model base classes, `Request`/`Response` objects, or framework exceptions.
+- DI containers are configured only in `setup`/`app`. service gets its ports via constructor/parameters, never by looking them up.
 
 ## Rules by priority
 
@@ -108,7 +108,7 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 | 9 | Standards & tooling | MEDIUM | `standards-` |
 
 ### 1. Boundaries & structure (CRITICAL) — [rules/structure.md](rules/structure.md)
-- `structure-cross-domain-imports` — Domain A may depend only on B's `entities`, `errors`, `useCase` port.
+- `structure-cross-domain-imports` — Domain A may depend only on B's `entities`, `errors`, `service` port.
 - `structure-public-api` — Each domain exposes one public surface; everything else is unreachable from outside.
 - `structure-platform-layer` — Infrastructure primitives live in `platform/`; platform depends on no domain.
 - `structure-app-root` — `app/` is the single composition root: routes, middleware, lifecycle.
@@ -120,33 +120,33 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 - `layer-entities-pure` — Entities hold invariants, no IO, never reference translators or framework types.
 - `layer-storage-neutral` — Storage persists and retrieves; no business rules in method names or queries.
 - `layer-gateway-dumb` — Gateway calls third parties and translates; it decides nothing.
-- `layer-usecase-rules-only` — Business rules only; depends on no IO library and no framework.
-- `layer-transport-shape-only` — Transport validates shape/presence, calls useCase, maps errors; no domain validation.
+- `layer-service-rules-only` — Business rules only; depends on no IO library and no framework.
+- `layer-transport-shape-only` — Transport validates shape/presence, calls service, maps errors; no domain validation.
 - `layer-setup-wiring-only` — Setup constructs and wires; no env/flag branching.
 - `layer-dto-no-leak` — Translator types never cross their adapter boundary.
 
 ### 3. Errors (HIGH) — [rules/errors.md](rules/errors.md)
 - `errors-domain-defined` — Each domain declares its errors with a kind and stable code.
-- `errors-adapters-translate` — Adapters translate vendor/driver failures into domain errors; vendor error types never reach useCase.
-- `errors-usecase-decides` — Retry/fallback/compensation decisions live in useCase, made on domain errors.
+- `errors-adapters-translate` — Adapters translate vendor/driver failures into domain errors; vendor error types never reach service.
+- `errors-service-decides` — Retry/fallback/compensation decisions live in service, made on domain errors.
 - `errors-transport-maps` — Each transport maps domain errors to protocol responses in exactly one place.
 - `errors-expected-vs-unexpected` — Expected errors are control flow; unexpected errors are logged once at the boundary.
 
 ### 4. Consistency (HIGH) — [rules/consistency.md](rules/consistency.md)
-- `consistency-tx-port` — Transactions via a `TxManager` port; useCase never holds a connection/session/transaction object.
+- `consistency-tx-port` — Transactions via a `TxManager` port; service never holds a connection/session/transaction object.
 - `consistency-one-domain-per-tx` — A DB transaction never spans domains.
 - `consistency-outbox` — Post-commit side effects (other domains, third parties) go through an outbox.
 - `consistency-idempotency` — Every retryable inbound entry point is idempotent.
 
 ### 5. Security & context (HIGH) — [rules/security.md](rules/security.md)
 - `security-authn-in-transport` — Authentication is transport middleware.
-- `security-authz-in-usecase` — Authorization is a business rule; it lives in useCase.
+- `security-authz-in-service` — Authorization is a business rule; it lives in service.
 - `security-context-propagation` — Principal, tenant, request ID travel in ctx via `platform` helpers.
 - `security-tenant-scoping` — Storage requires tenant scope on every multi-tenant query; fail closed.
 - `security-secrets-config` — Secrets come from config/secret store, injected via setup; never literals.
 
 ### 6. Testing (HIGH) — [rules/testing.md](rules/testing.md)
-- `testing-usecase-fakes` — useCase unit tests run against in-memory fakes of its ports.
+- `testing-service-fakes` — service unit tests run against in-memory fakes of its ports.
 - `testing-adapter-contract` — One contract suite per port; every adapter must pass it (enforces LSP).
 - `testing-transport` — Transport tests cover wire ↔ entity and error → response mapping.
 - `testing-e2e-through-setup` — A thin layer of end-to-end tests built through `setup`/`app`.
@@ -158,7 +158,7 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 - `crosscutting-async-transports` — Queue consumers, webhooks, cron jobs are transports like REST/gRPC.
 
 ### 8. Query & API design (MEDIUM) — [rules/api.md](rules/api.md)
-- `api-neutral-filters` — Storage accepts neutral filter objects; useCase supplies the business values.
+- `api-neutral-filters` — Storage accepts neutral filter objects; service supplies the business values.
 - `api-pagination` — Cursor pagination with one shared shape.
 - `api-error-envelope` — One error response envelope across all endpoints.
 - `api-versioning` — Breaking wire changes get a new transport version, not an edited one.
@@ -177,15 +177,15 @@ When creating a new domain `X` (concrete file names and syntax from the language
 
 1. `X/entities` — core types with constructor/factory-enforced invariants. Depends only on platform primitives.
 2. `X/errors` — the domain's errors (kind + stable code).
-3. `X/storage` — one small port per aggregate the useCase needs.
+3. `X/storage` — one small port per aggregate the service needs.
 4. `X/storage/<impl>` + `<impl>_dto` — implement; translate rows and driver failures.
 5. `X/gateway` — one small port per external capability.
 6. `X/gateway/<impl>` + `<impl>_dto` — implement; translate vendor payloads and failures.
 7. `X/publisher` (if X emits events) — port; adapter writes to the outbox.
-8. `X/useCase` — port + implementation; receives only ports.
-9. `X/transport` + `X/transport/<impl>` + `<impl>_dto` — handlers receive the useCase port; one error-mapping function per transport.
-10. `X/setup` — build the concrete graph from injected platform deps; return `(useCase, transport)`.
-11. Tests: useCase with fakes, contract suite per port (run against every adapter incl. the fake), transport mapping tests.
+8. `X/service` — port + implementation; receives only ports.
+9. `X/transport` + `X/transport/<impl>` + `<impl>_dto` — handlers receive the service port; one error-mapping function per transport.
+10. `X/setup` — build the concrete graph from injected platform deps; return `(service, transport)`.
+11. Tests: service with fakes, contract suite per port (run against every adapter incl. the fake), transport mapping tests.
 12. Migrations for X's tables owned by X.
 13. Register X in `app/` (call setup, mount transport). Add X to the boundary-lint config.
 
@@ -197,42 +197,42 @@ Flag:
 - Domain depending on another domain's `storage`, `gateway`, `transport`, `setup`, or translators
 - Domain reading or joining another domain's tables
 - `platform/` depending on a domain
-- Routes/middleware registered outside `app/`; useCase constructed in the entrypoint instead of `setup`
+- Routes/middleware registered outside `app/`; service constructed in the entrypoint instead of `setup`
 - Cyclic dependency between domains; multi-purpose domain
 
 **Layers**
-- Translator types in useCase signatures or entities
-- useCase or entities depending on any IO library or framework type (DB driver/ORM, HTTP, broker SDK, vendor SDK, framework annotations)
-- useCase receiving a connection, client, session, or transaction object instead of a port
-- useCase depending on a concrete adapter instead of a port
+- Translator types in service signatures or entities
+- service or entities depending on any IO library or framework type (DB driver/ORM, HTTP, broker SDK, vendor SDK, framework annotations)
+- service receiving a connection, client, session, or transaction object instead of a port
+- service depending on a concrete adapter instead of a port
 - Storage method names encoding business rules (`getEligibleUsers`)
 - Gateway making retry/fallback decisions based on business meaning
 - Transport doing domain validation (approved email domains, plan limits)
-- Setup branching on env/feature flags; DI container lookups inside useCase
+- Setup branching on env/feature flags; DI container lookups inside service
 
 **Errors**
-- Vendor/driver error or exception types reaching useCase
+- Vendor/driver error or exception types reaching service
 - Error → response mapping scattered across handlers
 - Expected errors logged as failures; one error logged at multiple layers
 
 **Consistency & security**
-- Transaction object passed into useCase; transaction spanning two domains; framework transaction annotation on useCase
+- Transaction object passed into service; transaction spanning two domains; framework transaction annotation on service
 - Remote call inside a DB transaction; post-commit side effect without outbox
 - Webhook/consumer handler that is not idempotent
 - Authorization in transport; query missing tenant scope; secret literal in code
 
 **Tests**
 - New adapter not run against its port's contract suite
-- useCase test requiring a real DB or network
+- service test requiring a real DB or network
 
 ## Anti-patterns
 
 - **Anemic entities** — bags of fields with no invariants. Validate in entity constructors/factories.
 - **Leaky translator / leaky vendor** — returning a DB row type or a vendor exception from an adapter. Translate at the boundary.
-- **God useCase** — one useCase orchestrating many domains. Split, or create a coordinator domain ([rules/structure.md](rules/structure.md)).
-- **Transport shortcut** — handler calling storage directly. Always go through useCase.
+- **God service** — one service orchestrating many domains. Split, or create a coordinator domain ([rules/structure.md](rules/structure.md)).
+- **Transport shortcut** — handler calling storage directly. Always go through service.
 - **Shared mutable entity** — two domains mutating the same entity type. Each domain owns its entities.
-- **Framework creep** — ORM models as entities, `@Transactional`/`@Injectable` on useCase, request objects passed into useCase.
+- **Framework creep** — ORM models as entities, `@Transactional`/`@Injectable` on service, request objects passed into service.
 - **Cross-domain join** — reading another domain's tables for a report. Use a read model.
 - **Remote call inside a DB transaction** — use the outbox.
 - **Growing `platform/utils`** — business logic hiding in the shared kernel. Find the owning domain.
@@ -247,7 +247,7 @@ Flag:
 | storage | persistence port | outbound | durable state |
 | gateway | 3rd-party port | outbound | external IO |
 | publisher | event port | outbound | emitted events |
-| useCase | business logic | center | rules, authz, retries |
+| service | business logic | center | rules, authz, retries |
 | transport | inbound port | inbound | protocol IO, error mapping |
 | setup | domain wiring | — | domain graph |
 | app | composition root | — | process lifecycle |

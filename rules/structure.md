@@ -2,28 +2,28 @@
 
 ## structure-cross-domain-imports
 
-Domain A may depend only on B's `entities`, `errors`, and `useCase` port. Never B's `storage`, `gateway`, `transport`, `setup`, or any translator.
+Domain A may depend only on B's `entities`, `errors`, and `service` port. Never B's `storage`, `gateway`, `transport`, `setup`, or any translator.
 
 **Wrong**
 ```
-# orders/useCase
+# orders/service
 import payments.storage.mysql          # reaching into another domain's persistence
 ```
 
 **Right**
 ```
-# orders/useCase
-import payments.useCase as PaymentsUseCase   # port only
+# orders/service
+import payments.service as PaymentsService   # port only
 import payments.entities, payments.errors
 
-useCase OrdersUseCase(payments: PaymentsUseCase, ...)   # injected by app/
+service OrdersService(payments: PaymentsService, ...)   # injected by app/
 ```
 
-`app/` builds payments first, then passes its useCase into `orders.setup(...)`.
+`app/` builds payments first, then passes its service into `orders.setup(...)`.
 
 ## structure-public-api
 
-A domain's public surface is exactly `entities`, `errors`, the `useCase` port, and any published event types. Everything else must be **unreachable** from outside the domain — by the language's visibility rules where possible, otherwise by a boundary linter in CI. If neither the compiler nor a linter stops it, the rule will be broken. See the language file for the mechanism.
+A domain's public surface is exactly `entities`, `errors`, the `service` port, and any published event types. Everything else must be **unreachable** from outside the domain — by the language's visibility rules where possible, otherwise by a boundary linter in CI. If neither the compiler nor a linter stops it, the rule will be broken. See the language file for the mechanism.
 
 ## structure-platform-layer
 
@@ -67,7 +67,7 @@ app.run(config):
 
 - Each domain owns its tables/collections and their migrations.
 - No other domain reads, writes, or joins those tables — not even "just a quick read-only query".
-- Need data from B? Call B's useCase. Need it at report scale? Build a read model (`api-read-models`).
+- Need data from B? Call B's service. Need it at report scale? Build a read model (`api-read-models`).
 - Foreign keys across domain tables are discouraged; store the ID and treat the other domain as the source of truth.
 - ORMs: a domain's ORM models/relations must not reference another domain's models.
 
@@ -94,4 +94,4 @@ Never break a cycle by letting one side reach into the other's storage.
 
 ## Application coordinators
 
-When one workflow genuinely orchestrates several domains (e.g. "close pay period" touches timesheets, payroll, and exports), create a dedicated **coordinator domain** (`payperiodclose/`) whose useCase depends on the other domains' useCase ports and owns no tables beyond its own workflow state. It follows every rule above. This is the fix for a God useCase.
+When one workflow genuinely orchestrates several domains (e.g. "close pay period" touches timesheets, payroll, and exports), create a dedicated **coordinator domain** (`payperiodclose/`) whose service depends on the other domains' service ports and owns no tables beyond its own workflow state. It follows every rule above. This is the fix for a God service.

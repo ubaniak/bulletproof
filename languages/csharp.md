@@ -10,8 +10,8 @@ Either one project with folders + namespaces, or one project per layer when comp
 src/
   Acme.App/                         # Program.cs, composition root
   Acme.Platform/
-  Acme.Timesheet/                   # PUBLIC: Entities, Errors, ITimesheetUseCase, events, ports
-    Entities/  Errors.cs  Ports/  UseCase/  Setup/
+  Acme.Timesheet/                   # PUBLIC: Entities, Errors, ITimesheetService, events, ports
+    Entities/  Errors.cs  Ports/  Service/  Setup/
     Storage/MySql/  Storage/MySqlDto/  Storage/Memory/
     Gateway/QuickBooks/  Gateway/QuickBooksDto/
     Transport/Rest/  Transport/RestDto/  Transport/Webhook/
@@ -30,7 +30,7 @@ public interface ITimesheetStorage
 
 ## Public API enforcement
 
-- Adapters, translators, and use-case implementations are `internal`; the port, entities, errors are `public`.
+- Adapters, translators, and service implementations are `internal`; the port, entities, errors are `public`.
 - `InternalsVisibleTo` only for the domain's own test project.
 - NetArchTest / ArchUnitNET tests in CI.
 
@@ -38,7 +38,7 @@ public interface ITimesheetStorage
 
 ```csharp
 Types.InAssembly(typeof(Timesheet).Assembly)
-    .That().ResideInNamespace("Acme.Timesheet.Entities").Or().ResideInNamespace("Acme.Timesheet.UseCase")
+    .That().ResideInNamespace("Acme.Timesheet.Entities").Or().ResideInNamespace("Acme.Timesheet.Service")
     .ShouldNot().HaveDependencyOnAny("System.Data", "Microsoft.EntityFrameworkCore", "Microsoft.AspNetCore", "Stripe", "System.Net.Http")
     .GetResult().IsSuccessful.Should().BeTrue();
 
@@ -77,7 +77,7 @@ Adapter implemented with EF Core `Database.BeginTransactionAsync` or `Transactio
 
 ## Wiring
 
-One `IServiceCollection` extension per domain in `Setup` (`services.AddTimesheet(config)`) registering adapters against ports. `Program.cs` (app) calls each extension and maps endpoints. useCase classes never take `IServiceProvider`.
+One `IServiceCollection` extension per domain in `Setup` (`services.AddTimesheet(config)`) registering adapters against ports. `Program.cs` (app) calls each extension and maps endpoints. Service classes never take `IServiceProvider`.
 
 EF Core entity classes are storage models (`Storage/Ef`), not domain entities.
 
@@ -94,6 +94,6 @@ EF Core entity classes are storage models (`Storage/Ef`), not domain entities.
 
 ## Traps
 
-- EF `DbContext` injected into use cases.
-- `[Authorize(Roles=...)]` as the only authorization — fine as a coarse guard, business authz stays in useCase.
-- MediatR handlers mixing transport and business logic — a handler is a useCase method; keep HTTP types out.
+- EF `DbContext` injected into services.
+- `[Authorize(Roles=...)]` as the only authorization — fine as a coarse guard, business authz stays in service.
+- MediatR handlers mixing transport and business logic — a handler is a service method; keep HTTP types out.

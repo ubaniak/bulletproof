@@ -14,7 +14,7 @@ timesheet/
     storage.go                  # port(s)
     gateway.go
     publisher.go
-    use_case.go                 # UseCase interface + impl
+    service.go                 # Service interface + impl
     transport.go
     setup.go
     internal/
@@ -43,7 +43,7 @@ Declared in the domain package (consumer side). Keep them small; split per aggre
 ## Public API enforcement
 
 - `internal/` for every adapter and translator.
-- Exported identifiers in the domain root are the public API: `UseCase`, entities, errors, event types.
+- Exported identifiers in the domain root are the public API: `Service`, entities, errors, event types.
 - `go-arch-lint` for the rest (below).
 
 ## Boundary lint
@@ -71,7 +71,7 @@ deps:
 depguard:
   rules:
     domain-core:
-      files: ["**/entities/*.go", "**/use_case.go"]
+      files: ["**/entities/*.go", "**/service.go"]
       deny:
         - { pkg: database/sql, desc: "use a storage port" }
         - { pkg: net/http,     desc: "use a gateway/transport" }
@@ -110,7 +110,7 @@ Transport: one `writeError(w, err)` per handler package that switches on `Kind`.
 
 ## Context
 
-`context.Context` as the first parameter of every port method and useCase method. Typed keys in `platform/ctxkeys`; accessors `platform.PrincipalFrom(ctx)`, `platform.TenantFrom(ctx)`.
+`context.Context` as the first parameter of every port method and service method. Typed keys in `platform/ctxkeys`; accessors `platform.PrincipalFrom(ctx)`, `platform.TenantFrom(ctx)`.
 
 ## Transactions
 
@@ -119,17 +119,17 @@ type TxManager interface {
     WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 ```
-The adapter stores `*sql.Tx` in ctx; storage adapters call `db.Conn(ctx)` which returns the tx if present. useCase never sees `*sql.Tx`.
+The adapter stores `*sql.Tx` in ctx; storage adapters call `db.Conn(ctx)` which returns the tx if present. service never sees `*sql.Tx`.
 
 ## Wiring
 
 Manual constructor injection. No DI framework needed. `wire`/`fx` are acceptable only inside `setup`/`app`.
 
 ```go
-func Setup(p *platform.Platform, payments payments.UseCase) (UseCase, Transport) {
+func Setup(p *platform.Platform, payments payments.Service) (Service, Transport) {
     var store Storage = mysql.New(p.DB)
     store = cached.New(store, p.Cache)
-    uc := newUseCase(store, payments, p.Tx, p.Clock)
+    uc := newService(store, payments, p.Tx, p.Clock)
     return uc, rest.NewHandler(uc)
 }
 ```

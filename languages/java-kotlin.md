@@ -7,7 +7,7 @@ How to express the rules in `rules/` idiomatically on the JVM. Rules win over an
 ```
 com.acme.app                       # Application/main, composition root
 com.acme.platform.{config,logging,db,tx,errors,context,clock}
-com.acme.timesheet                 # PUBLIC: entities, errors, UseCase, events, ports
+com.acme.timesheet                 # PUBLIC: entities, errors, Service, events, ports
 com.acme.timesheet.entities
 com.acme.timesheet.setup
 com.acme.timesheet.storage.mysql       com.acme.timesheet.storage.mysqldto
@@ -40,7 +40,7 @@ ArchUnit:
     .should().dependOnClassesThat().resideInAnyPackage("com.acme.timesheet..", "com.acme.payroll..")
 
 @ArchTest val pureCore = noClasses().that().resideInAnyPackage("..entities..")
-    .or().haveSimpleNameEndingWith("UseCaseImpl")
+    .or().haveSimpleNameEndingWith("ServiceImpl")
     .should().dependOnClassesThat().resideInAnyPackage(
         "java.sql..", "jakarta.persistence..", "org.springframework..", "com.stripe..", "okhttp3..")
 
@@ -76,11 +76,11 @@ Explicit `ctx` parameter (preferred), or Kotlin coroutine context elements. Avoi
 ```kotlin
 interface TxManager { fun <T> withinTx(ctx: Ctx, work: (Ctx) -> T): T }
 ```
-Adapter implemented with Spring `TransactionTemplate` or jOOQ `transactionResult`. **No `@Transactional` on useCase** — the annotation couples business logic to Spring and hides boundaries.
+Adapter implemented with Spring `TransactionTemplate` or jOOQ `transactionResult`. **No `@Transactional` on service** — the annotation couples business logic to Spring and hides boundaries.
 
 ## Wiring
 
-Spring: `@Configuration` class per domain in `setup` (`@Bean fun timesheetUseCase(...)`) building plain classes. useCase classes carry **no** Spring annotations. Controllers (`@RestController`) are transport. Manual wiring or Koin works the same way.
+Spring: `@Configuration` class per domain in `setup` (`@Bean fun timesheetService(...)`) building plain classes. service classes carry **no** Spring annotations. Controllers (`@RestController`) are transport. Manual wiring or Koin works the same way.
 
 JPA `@Entity` classes are storage-adapter models (in `storage.jpa`), never domain entities.
 
@@ -92,11 +92,11 @@ JPA `@Entity` classes are storage-adapter models (in `storage.jpa`), never domai
 
 ## Naming & tooling
 
-- `PascalCase` types, `camelCase` methods; `UseCase` suffix on the port.
+- `PascalCase` types, `camelCase` methods; `Service` suffix on the port.
 - ktlint/detekt or Spotless + Checkstyle/Error Prone; Gradle version catalogs with locked versions; ArchUnit + tests as CI gates.
 
 ## Traps
 
-- `@Transactional`, `@Service`, `@Autowired` on useCase.
+- `@Transactional`, `@Service`, `@Autowired` on a service.
 - JPA entities with lazy relations leaking out of storage.
 - Controllers containing business `if`s.

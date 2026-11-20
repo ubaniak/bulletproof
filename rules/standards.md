@@ -10,12 +10,12 @@ Every dependency rule must be checked by a tool in CI. Review alone does not hol
 |---|---|
 | `platform` | nothing in the project |
 | `<domain>/entities`, `<domain>/errors` | `platform` |
-| `<domain>` ports, `useCase` | `platform`, own entities/errors, other domains' public API |
+| `<domain>` ports, `service` | `platform`, own entities/errors, other domains' public API |
 | `<domain>/storage|gateway|transport/*` adapters | `platform`, own domain |
 | `<domain>/setup` | `platform`, own domain, own adapters, other domains' public API |
 | `app` | `platform`, every domain's public API and `setup` |
 
-Plus a deny-list: `entities` and `useCase` may not depend on any IO library or web/ORM framework package.
+Plus a deny-list: `entities` and `service` may not depend on any IO library or web/ORM framework package.
 
 Prefer language visibility (internal packages, module exports, access modifiers) **and** a linter: visibility stops accidental imports, the linter catches the rest. Add each new domain to the config as part of the scaffold.
 
@@ -25,7 +25,7 @@ Concept names are fixed across languages; casing follows the language file.
 
 | Concept | Fixed name |
 |---|---|
-| business layer | `useCase` (never mixed with `service`) |
+| business layer | `service` (one name everywhere; never `useCase`) |
 | ports | role names: `UserStorage`, `PaymentGateway`, `Publisher` — never vendor names |
 | adapters | technology names: `mysql`, `stripe`, `rest`, `memory`, `cached` |
 | translators | `<impl>_dto` (or the language's casing of it) |

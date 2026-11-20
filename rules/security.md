@@ -4,9 +4,9 @@
 
 Authentication (who is calling) is transport middleware registered in `app/`. It verifies the token/signature and puts a `Principal` in ctx. Webhook transports verify the provider signature before anything else.
 
-## security-authz-in-usecase
+## security-authz-in-service
 
-Authorization (may they do this) is a business rule, so it lives in useCase.
+Authorization (may they do this) is a business rule, so it lives in service.
 
 **Wrong** — role check in the handler (or a framework guard/annotation on the route) as the only check; a second transport (gRPC, consumer, cron) silently skips it:
 ```
@@ -23,7 +23,7 @@ approveTimesheet(ctx, id)
   ...
 ```
 
-Coarse route guards in transport are fine as defence in depth, never as the only check. Complex policies can sit behind an `Authz` port declared by the domain; useCase still decides when to call it.
+Coarse route guards in transport are fine as defence in depth, never as the only check. Complex policies can sit behind an `Authz` port declared by the domain; service still decides when to call it.
 
 ## security-context-propagation
 
