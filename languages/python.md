@@ -10,11 +10,11 @@ src/<project>/
   app/app.py
   platform/{config,logging,db,tx,errors,context,clock}.py
   timesheet/
-    __init__.py                    # PUBLIC API via __all__: entities, errors, UseCase, events
+    __init__.py                    # PUBLIC API via __all__: entities, errors, Service, events
     entities.py
     errors.py
     ports.py                       # storage/gateway/publisher/transport protocols
-    use_case.py
+    service.py
     setup.py
     storage/mysql.py  storage/mysql_dto.py  storage/memory.py  storage/contract.py
     gateway/quickbooks.py  gateway/quickbooks_dto.py
@@ -59,9 +59,9 @@ source_modules = project.payroll
 forbidden_modules = project.timesheet.storage, project.timesheet.gateway, project.timesheet.transport, project.timesheet.setup
 
 [importlinter:contract:pure-core]
-name = entities and use cases import no IO
+name = entities and services import no IO
 type = forbidden
-source_modules = project.timesheet.entities, project.timesheet.use_case
+source_modules = project.timesheet.entities, project.timesheet.service
 forbidden_modules = sqlalchemy, psycopg, httpx, requests, fastapi, django, stripe
 ```
 
@@ -109,9 +109,9 @@ SQLAlchemy `Session`/`AsyncSession` lives only in the adapter, carried via ctx/c
 
 ## Wiring
 
-Manual construction in `setup.py`. `dependency-injector` or FastAPI `Depends` only in `setup`/`app`/transport — `Depends` never in useCase signatures.
+Manual construction in `setup.py`. `dependency-injector` or FastAPI `Depends` only in `setup`/`app`/transport — `Depends` never in service signatures.
 
-**Django**: models are storage adapters, not entities; views/DRF serializers are transport + translators; business logic leaves `models.py`/views into `use_case.py`.
+**Django**: models are storage adapters, not entities; views/DRF serializers are transport + translators; business logic leaves `models.py`/views into `service.py`.
 
 ## Testing
 
@@ -128,5 +128,5 @@ Manual construction in `setup.py`. `dependency-injector` or FastAPI `Depends` on
 ## Traps
 
 - SQLAlchemy/Django models used as entities.
-- Pydantic models from transport passed into useCase — translate to entities/primitives.
-- Module-level singletons (`db = Database()`) imported by useCase — inject.
+- Pydantic models from transport passed into service — translate to entities/primitives.
+- Module-level singletons (`db = Database()`) imported by service — inject.

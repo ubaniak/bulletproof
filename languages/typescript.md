@@ -10,13 +10,13 @@ src/
   app/app.ts
   platform/{config,logger,db,tx,errors,context,clock}.ts
   timesheet/
-    index.ts                      # PUBLIC API: re-exports entities, errors, UseCase type, events
+    index.ts                      # PUBLIC API: re-exports entities, errors, Service type, events
     entities/timesheet.ts
     errors.ts
     storage.ts                    # port(s)
     gateway.ts
     publisher.ts
-    use-case.ts                   # UseCase interface + implementation
+    service.ts                   # Service port + implementation
     transport.ts
     setup.ts
     storage/mysql/  storage/mysql-dto/  storage/memory/  storage/contract.ts
@@ -40,7 +40,7 @@ Use `interface`/`type`, not abstract classes. Declared in the domain.
 
 ## Public API enforcement
 
-- `index.ts` re-exports only `entities`, `errors`, `UseCase` (type), event types.
+- `index.ts` re-exports only `entities`, `errors`, `Service` (type), event types.
 - `@/` path alias; deep imports into another domain forbidden by lint.
 - `package.json` `exports` per domain if domains are workspace packages.
 
@@ -53,7 +53,7 @@ settings: {
     { type: "platform", pattern: "src/platform/*" },
     { type: "app",      pattern: "src/app/*" },
     { type: "public",   pattern: "src/*/index.ts", mode: "file", capture: ["domain"] },
-    { type: "core",     pattern: "src/*/(entities|errors.ts|use-case.ts|storage.ts|gateway.ts|publisher.ts|transport.ts)", capture: ["domain"] },
+    { type: "core",     pattern: "src/*/(entities|errors.ts|service.ts|storage.ts|gateway.ts|publisher.ts|transport.ts)", capture: ["domain"] },
     { type: "adapter",  pattern: "src/*/(storage|gateway|transport)/*", capture: ["domain"] },
     { type: "setup",    pattern: "src/*/setup.ts", mode: "file", capture: ["domain"] },
   ],
@@ -69,7 +69,7 @@ rules: {
   "no-restricted-imports": ["error", { patterns: ["@/*/storage/*", "@/*/gateway/*", "@/*/transport/*"] }],
 }
 ```
-Add an override for `entities/**` and `use-case.ts` restricting `pg`, `mysql2`, `prisma`, `typeorm`, `axios`, `express`, `@nestjs/*`, vendor SDKs. `dependency-cruiser` is an equivalent alternative.
+Add an override for `entities/**` and `service.ts` restricting `pg`, `mysql2`, `prisma`, `typeorm`, `axios`, `express`, `@nestjs/*`, vendor SDKs. `dependency-cruiser` is an equivalent alternative.
 
 ## Errors
 
@@ -110,7 +110,7 @@ The adapter puts the driver/ORM transaction into ctx (or ALS); storage adapters 
 
 Manual constructor injection in `setup.ts`. DI containers (tsyringe, Inversify) only in `setup`/`app`.
 
-**NestJS**: modules, `@Injectable`, `@Controller` belong to `setup` and `transport` only. useCase is a plain class registered via a factory provider in the module; no Nest decorators or imports in `use-case.ts` or entities. Guards are coarse authn; authz stays in useCase.
+**NestJS**: modules, `@Injectable`, `@Controller` belong to `setup` and `transport` only. A service is a plain class registered via a factory provider in the module; no Nest decorators or imports in `service.ts` or entities. Guards are coarse authn; authz stays in the service.
 
 ## Testing
 
@@ -127,5 +127,5 @@ Manual constructor injection in `setup.ts`. DI containers (tsyringe, Inversify) 
 ## Traps
 
 - Prisma/TypeORM entities used as domain entities — keep ORM models in `storage/<impl>`, translate.
-- Express `req`/`res` passed into useCase.
-- Zod schemas for **business** rules in transport — Zod checks shape; business rules go in useCase/entities.
+- Express `req`/`res` passed into service.
+- Zod schemas for **business** rules in transport — Zod checks shape; business rules go in service/entities.

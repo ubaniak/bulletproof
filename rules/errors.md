@@ -3,7 +3,7 @@
 Errors cross every layer, so they need one model. It is defined in terms of **kinds**, not language mechanics: Go returns error values, Java/C#/Python/TS throw exceptions, some codebases use `Result` types. The language file says which; the rules are the same.
 
 ```
-driver/vendor failure ──(adapter translator)──▶ domain error ──(useCase decides)──▶ domain error
+driver/vendor failure ──(adapter translator)──▶ domain error ──(service decides)──▶ domain error
                                                                        │
                                   transport maps once ──▶ HTTP status / gRPC code / ack-nack
 ```
@@ -29,12 +29,12 @@ payments.errors:
 
 ## errors-adapters-translate
 
-Storage and gateway adapters translate driver/vendor failures in their translator into domain errors. Vendor error/exception types never reach useCase.
+Storage and gateway adapters translate driver/vendor failures in their translator into domain errors. Vendor error/exception types never reach service.
 
 **Wrong**
 ```
 charge(ctx, c)
-  return stripeClient.createCharge(...)     # StripeError propagates into useCase
+  return stripeClient.createCharge(...)     # StripeError propagates into service
 ```
 
 **Right**
@@ -48,11 +48,11 @@ stripe_dto.translateError(e: StripeError) -> DomainError
 
 Both `gateway/stripe` and `gateway/braintree` now fail the same way for the same situation — the LSP requirement. Keep the original as the cause for logs; never expose it to callers.
 
-In exception languages, the adapter catches **only** vendor/driver exceptions and rethrows domain ones. Do not catch-all in useCase.
+In exception languages, the adapter catches **only** vendor/driver exceptions and rethrows domain ones. Do not catch-all in service.
 
-## errors-usecase-decides
+## errors-service-decides
 
-Retry, fallback, and compensation are business decisions. The useCase makes them on domain errors:
+Retry, fallback, and compensation are business decisions. The service makes them on domain errors:
 
 ```
 result = primary.charge(ctx, c)

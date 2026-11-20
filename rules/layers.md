@@ -43,7 +43,7 @@ getEligibleUsers(ctx)   # "active premium users seen in 30 days" is a business r
   db.query("... WHERE status='active' AND plan='premium' AND last_login > NOW() - 30 days")
 ```
 
-Fix: a neutral filter (`api-neutral-filters`) — useCase decides the values, storage builds the query:
+Fix: a neutral filter (`api-neutral-filters`) — service decides the values, storage builds the query:
 ```
 storage.list(ctx, UserFilter(status: "active", plan: "premium", lastLoginAfter: clock.now() - 30 days))
 ```
@@ -71,17 +71,17 @@ catch StripeError e
   if isRetryableBusinessError(e): retry with fallback payment method   # business decision
 ```
 
-**Also wrong** — letting `StripeError` escape to useCase. That leaks the vendor into the domain and makes `gateway/stripe` and `gateway/braintree` non-substitutable (LSP).
+**Also wrong** — letting `StripeError` escape to service. That leaks the vendor into the domain and makes `gateway/stripe` and `gateway/braintree` non-substitutable (LSP).
 
 Transport-level resilience that respects the contract (timeouts, transparent retry on connection reset) is allowed, preferably as a decorator (`crosscutting-decorators`).
 
-## layer-usecase-rules-only
+## layer-service-rules-only
 
-useCase holds business rules and orchestration via ports. It depends on no IO library and no framework.
+A service holds business rules and orchestration via ports. It depends on no IO library and no framework.
 
 **Right**
 ```
-useCase UserUseCase(storage: UserStorage, authz: Authz)
+service UserService(storage: UserStorage, authz: Authz)
   createUser(ctx, name, email) -> User | Forbidden | UnauthorizedDomain | AlreadyExists
     authz.require(ctx, "user:create")
     if not isApprovedDomain(email): fail UnauthorizedDomain
@@ -96,22 +96,22 @@ useCase UserUseCase(storage: UserStorage, authz: Authz)
 **Wrong**
 ```
 createUser(ctx, name, email)
-  row = db.query("SELECT id FROM users WHERE email = ?", email)   # useCase touching the DB
+  row = db.query("SELECT id FROM users WHERE email = ?", email)   # service touching the DB
 ```
 
 Fix: add `getByEmail` to the storage port.
 
 ## layer-transport-shape-only
 
-Transport (REST, gRPC, consumers, webhooks, cron) translates wire → entity, calls useCase, translates entity → wire, maps errors.
+Transport (REST, gRPC, consumers, webhooks, cron) translates wire → entity, calls service, translates entity → wire, maps errors.
 
 **Right**
 ```
-handler UserRestHandler(useCase: UserUseCase)
+handler UserRestHandler(service: UserService)
   POST /users (req)
     input = rest_dto.parseCreateUser(req.body)       # shape: required fields, types, email syntax
     if input invalid: return mapError(Invalid(input.problems))
-    result = useCase.createUser(req.ctx, input.name, input.email)
+    result = service.createUser(req.ctx, input.name, input.email)
     on error e: return mapError(e)                    # single mapping function, see errors.md
     return 201, rest_dto.toUserResponse(result)
 ```
@@ -127,9 +127,9 @@ Transport checks only shape and presence: required fields, types, syntax. Transl
 
 **Right** — pure dependency injection, deps passed in:
 ```
-orders.setup(p: Platform, payments: PaymentsUseCase) -> (OrdersUseCase, OrdersTransport)
+orders.setup(p: Platform, payments: PaymentsService) -> (OrdersService, OrdersTransport)
   storage = MySQLOrderStorage(p.db)
-  uc      = OrdersUseCase(storage, payments, p.tx, p.clock)
+  uc      = OrdersService(storage, payments, p.tx, p.clock)
   return uc, OrdersRestHandler(uc)
 ```
 
@@ -142,4 +142,4 @@ Fix: `app/` chooses which adapter to pass (e.g. a fake gateway in local dev); se
 
 ## layer-dto-no-leak
 
-Translators exist only to convert between entities and an underlying representation (row, ORM model, vendor payload, wire format). A row type in a useCase signature, an entity field typed as a vendor payload, an ORM model returned from storage, or a vendor exception escaping a gateway are all leaks. Translate at the adapter boundary.
+Translators exist only to convert between entities and an underlying representation (row, ORM model, vendor payload, wire format). A row type in a service signature, an entity field typed as a vendor payload, an ORM model returned from storage, or a vendor exception escaping a gateway are all leaks. Translate at the adapter boundary.
