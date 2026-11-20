@@ -56,6 +56,10 @@ Rules in `rules/` are language-neutral (pseudocode). Claude detects the stack fr
     <entrypoint>           # load config, call app.run
     app/                   # composition root: routes, middleware, lifecycle
     platform/              # shared kernel, imports no domain
+    transport/             # inbound adapters: protocol, then domain
+        rest/<domain>      # handler
+        rest/<domain>_dto  # wire <-> entity translation
+        cmd/<domain>       # CLI commands (also grpc, consumer, webhook, cron)
     <domain>/
         entities/
         errors
@@ -67,11 +71,8 @@ Rules in `rules/` are language-neutral (pseudocode). Claude detects the stack fr
         gateway/<impl>_dto
         publisher          # optional event port
         service            # business logic
-        transport          # port
-        transport/<impl>   # rest, grpc, consumer, webhook, cron
-        transport/<impl>_dto
-        setup              # wiring
+        setup              # wiring, returns the service
 
-Every adapter `<impl>` pairs with a sibling `<impl>_dto`. Each entry is a unit of code ownership: directory, package, module, or namespace, per the language file.
+Every adapter `<impl>` pairs with a sibling `<impl>_dto`; transport sits beside `platform`, not inside a domain. Each entry is a unit of code ownership: directory, package, module, or namespace, per the language file.
 
-Hard rule: a domain may only depend on another domain's `entities`, `errors`, and `service` port.
+Hard rule: a domain may only depend on another domain's `entities`, `errors`, and `service` port. No domain depends on `transport/`; a transport depends only on its own domain's public API.

@@ -7,12 +7,13 @@ How to express the rules in `rules/` idiomatically on the JVM. Rules win over an
 ```
 com.acme.app                       # Application/main, composition root
 com.acme.platform.{config,logging,db,tx,errors,context,clock}
+com.acme.transport.rest.timesheet      com.acme.transport.rest.timesheetdto
+com.acme.transport.cmd.timesheet       com.acme.transport.cmd.timesheetdto
 com.acme.timesheet                 # PUBLIC: entities, errors, Service, events, ports
 com.acme.timesheet.entities
 com.acme.timesheet.setup
 com.acme.timesheet.storage.mysql       com.acme.timesheet.storage.mysqldto
 com.acme.timesheet.gateway.quickbooks  com.acme.timesheet.gateway.quickbooksdto
-com.acme.timesheet.transport.rest      com.acme.timesheet.transport.restdto
 ```
 
 Package names cannot contain `_`; translators are `<impl>dto` (or a `dto` subpackage of the adapter).
@@ -46,7 +47,15 @@ ArchUnit:
 
 @ArchTest val noAdapterReach = noClasses().that().resideOutsideOfPackage("com.acme.timesheet..")
     .should().dependOnClassesThat().resideInAnyPackage(
-        "com.acme.timesheet.storage..", "com.acme.timesheet.gateway..", "com.acme.timesheet.transport..")
+        "com.acme.timesheet.storage..", "com.acme.timesheet.gateway..", "com.acme.timesheet.setup..")
+
+@ArchTest val domainsIgnoreTransport = noClasses().that().resideInAnyPackage("com.acme.timesheet..", "com.acme.payroll..")
+    .should().dependOnClassesThat().resideInAPackage("com.acme.transport..")
+
+@ArchTest val transportUsesPublicApiOnly = noClasses().that().resideInAPackage("com.acme.transport..")
+    .should().dependOnClassesThat().resideInAnyPackage(
+        "com.acme.timesheet.storage..", "com.acme.timesheet.gateway..", "com.acme.timesheet.setup..",
+        "com.acme.payroll.storage..", "com.acme.payroll.gateway..", "com.acme.payroll.setup..")
 ```
 
 ## Errors

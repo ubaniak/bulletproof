@@ -36,7 +36,7 @@ All HTTP endpoints return errors in one envelope produced by the transport error
 
 ## api-versioning
 
-- Wire contracts (`transport/<impl>_dto`) are versioned by route prefix (`/v1`) or by a versioned adapter (`rest/v1`, `rest/v2`).
+- Wire contracts (`transport/<protocol>/<domain>_dto`) are versioned by route prefix (`/v1`) or by a versioned protocol folder (`transport/rest_v1/<domain>`, `transport/rest_v2/<domain>`).
 - Breaking change → add a new version adapter alongside the old one (Open/Closed). Both call the same service.
 - Additive changes (new optional fields) do not need a new version.
 - Published event payloads follow the same rules.

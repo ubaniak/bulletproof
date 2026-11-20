@@ -26,7 +26,7 @@ Each layer has one reason to change:
 Add a new adapter, never modify existing ones:
 
 - New DB? Add `storage/<newengine>/` + `<newengine>_dto/`. Don't edit `mysql/`.
-- New protocol or API version? Add `transport/<newproto>/` + `<newproto>_dto/`. Don't edit `rest/`.
+- New protocol or API version? Add `transport/<newproto>/<domain>` + `<domain>_dto`. Don't edit `transport/rest/`.
 - New external provider? Add `gateway/<newprovider>/` + `<newprovider>_dto/`. Don't edit `stripe/`.
 - New cross-cutting behaviour? Add a decorator adapter (`storage/cached/`). Don't edit the wrapped adapter.
 

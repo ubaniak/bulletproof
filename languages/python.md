@@ -9,16 +9,19 @@ src/<project>/
   main.py                          # load config, app.run()
   app/app.py
   platform/{config,logging,db,tx,errors,context,clock}.py
+  transport/                       # inbound adapters: protocol, then domain
+    rest/timesheet.py  rest/timesheet_dto.py
+    webhook/timesheet.py  webhook/timesheet_dto.py
+    cmd/timesheet.py  cmd/timesheet_dto.py
   timesheet/
     __init__.py                    # PUBLIC API via __all__: entities, errors, Service, events
     entities.py
     errors.py
-    ports.py                       # storage/gateway/publisher/transport protocols
+    ports.py                       # storage/gateway/publisher protocols
     service.py
     setup.py
     storage/mysql.py  storage/mysql_dto.py  storage/memory.py  storage/contract.py
     gateway/quickbooks.py  gateway/quickbooks_dto.py
-    transport/rest.py  transport/rest_dto.py  transport/webhook.py  transport/webhook_dto.py
 ```
 
 ## Ports
@@ -56,7 +59,19 @@ forbidden_modules = project.timesheet, project.payroll
 name = domains use only each other's public API
 type = forbidden
 source_modules = project.payroll
-forbidden_modules = project.timesheet.storage, project.timesheet.gateway, project.timesheet.transport, project.timesheet.setup
+forbidden_modules = project.timesheet.storage, project.timesheet.gateway, project.timesheet.setup
+
+[importlinter:contract:domains-ignore-transport]
+name = no domain depends on transport
+type = forbidden
+source_modules = project.timesheet, project.payroll
+forbidden_modules = project.transport
+
+[importlinter:contract:transport-public-api-only]
+name = transport uses only its own domain's public API
+type = forbidden
+source_modules = project.transport
+forbidden_modules = project.timesheet.storage, project.timesheet.gateway, project.timesheet.setup, project.payroll.storage, project.payroll.gateway, project.payroll.setup
 
 [importlinter:contract:pure-core]
 name = entities and services import no IO

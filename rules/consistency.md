@@ -34,7 +34,7 @@ Side effects that must happen after a commit — notifying another domain, calli
 
 1. In the same transaction as the state change, service calls `publisher.publish(ctx, event)`; the adapter writes to an `outbox` table.
 2. A relay (worker registered in `app/`) reads the outbox and delivers to the bus or invokes the target.
-3. Consumers are transports (`transport/consumer`) that call their own service.
+3. Consumers are transports (`transport/consumer/<domain>`) that call their own domain's service.
 
 **Wrong**
 ```

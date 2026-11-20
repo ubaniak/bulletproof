@@ -11,11 +11,12 @@ Every dependency rule must be checked by a tool in CI. Review alone does not hol
 | `platform` | nothing in the project |
 | `<domain>/entities`, `<domain>/errors` | `platform` |
 | `<domain>` ports, `service` | `platform`, own entities/errors, other domains' public API |
-| `<domain>/storage|gateway|transport/*` adapters | `platform`, own domain |
+| `<domain>/storage|gateway/*` adapters | `platform`, own domain |
+| `transport/<protocol>/<domain>` | `platform`, that domain's public API only |
 | `<domain>/setup` | `platform`, own domain, own adapters, other domains' public API |
-| `app` | `platform`, every domain's public API and `setup` |
+| `app` | `platform`, `transport`, every domain's public API and `setup` |
 
-Plus a deny-list: `entities` and `service` may not depend on any IO library or web/ORM framework package.
+Plus a deny-list: `entities` and `service` may not depend on any IO library or web/ORM framework package, and no domain may depend on `transport`.
 
 Prefer language visibility (internal packages, module exports, access modifiers) **and** a linter: visibility stops accidental imports, the linter catches the rest. Add each new domain to the config as part of the scaffold.
 
