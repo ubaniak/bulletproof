@@ -74,4 +74,4 @@ Rules in `rules/` are language-neutral (pseudocode). Claude detects the stack fr
 
 Every adapter `<impl>` pairs with a sibling `<impl>_dto`. Each entry is a unit of code ownership: directory, package, module, or namespace, per the language file.
 
-Hard rule: a domain may only depend on another domain's `entities`, `errors`, and `service` interface.
+Hard rule: a domain may only depend on another domain's `entities`, `errors`, and `service` port.

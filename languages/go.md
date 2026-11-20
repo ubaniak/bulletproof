@@ -14,7 +14,7 @@ timesheet/
     storage.go                  # port(s)
     gateway.go
     publisher.go
-    service.go                 # Service interface + impl
+    service.go                 # Service port + impl
     transport.go
     setup.go
     internal/

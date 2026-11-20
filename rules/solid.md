@@ -55,7 +55,7 @@ Enforced by: the per-port contract suite every adapter must pass (testing.md).
 
 ## I — Interface Segregation
 
-Keep ports small and role-specific. One fat `Repository` interface is an anti-pattern.
+Keep ports small and role-specific. One fat `Repository` port is an anti-pattern.
 
 - Split storage by aggregate: `UserStorage`, `OrderStorage`, not `Storage`
 - Split gateway by capability: `PaymentGateway`, `RefundGateway`, not `StripeClient`

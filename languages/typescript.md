@@ -16,7 +16,7 @@ src/
     storage.ts                    # port(s)
     gateway.ts
     publisher.ts
-    service.ts                   # Service interface + implementation
+    service.ts                   # Service port + implementation
     transport.ts
     setup.ts
     storage/mysql/  storage/mysql-dto/  storage/memory/  storage/contract.ts
