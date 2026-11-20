@@ -80,7 +80,7 @@ Adapter implemented with Spring `TransactionTemplate` or jOOQ `transactionResult
 
 ## Wiring
 
-Spring: `@Configuration` class per domain in `setup` (`@Bean fun timesheetService(...)`) building plain classes. service classes carry **no** Spring annotations. Controllers (`@RestController`) are transport. Manual wiring or Koin works the same way.
+Spring: `@Configuration` class per domain in `setup` (`@Bean fun timesheetService(...)`) building plain classes. Service classes carry **no** Spring annotations. Controllers (`@RestController`) are transport. Manual wiring or Koin works the same way.
 
 JPA `@Entity` classes are storage-adapter models (in `storage.jpa`), never domain entities.
 

@@ -77,7 +77,7 @@ Transport-level resilience that respects the contract (timeouts, transparent ret
 
 ## layer-service-rules-only
 
-service holds business rules and orchestration via ports. It depends on no IO library and no framework.
+A service holds business rules and orchestration via ports. It depends on no IO library and no framework.
 
 **Right**
 ```

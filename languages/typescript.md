@@ -110,7 +110,7 @@ The adapter puts the driver/ORM transaction into ctx (or ALS); storage adapters 
 
 Manual constructor injection in `setup.ts`. DI containers (tsyringe, Inversify) only in `setup`/`app`.
 
-**NestJS**: modules, `@Injectable`, `@Controller` belong to `setup` and `transport` only. service is a plain class registered via a factory provider in the module; no Nest decorators or imports in `service.ts` or entities. Guards are coarse authn; authz stays in service.
+**NestJS**: modules, `@Injectable`, `@Controller` belong to `setup` and `transport` only. A service is a plain class registered via a factory provider in the module; no Nest decorators or imports in `service.ts` or entities. Guards are coarse authn; authz stays in the service.
 
 ## Testing
 

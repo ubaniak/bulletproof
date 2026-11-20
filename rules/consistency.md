@@ -2,7 +2,7 @@
 
 ## consistency-tx-port
 
-When one service writes through several storage ports atomically, use a transaction port. service never holds a connection, session, unit-of-work implementation, or transaction object.
+When one service writes through several storage ports atomically, use a transaction port. The service never holds a connection, session, unit-of-work implementation, or transaction object.
 
 ```
 port TxManager                                  # declared in platform
@@ -54,6 +54,6 @@ Direct service call vs. event:
 Every entry point that can be retried must be idempotent:
 - Webhooks (providers redeliver), queue consumers (at-least-once), client POSTs with retry.
 - Use an idempotency key (provider event ID, message ID, `Idempotency-Key` header) stored with a unique constraint by the receiving domain's storage.
-- service checks/records the key; transport only extracts it.
+- The service checks/records the key; transport only extracts it.
 
 Long multi-step workflows across domains (sagas) are owned by a coordinator domain that persists its workflow state and issues compensating actions on failure.
