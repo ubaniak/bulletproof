@@ -127,6 +127,10 @@ type TxManager interface {
 ```
 The adapter stores `*sql.Tx` in ctx; storage adapters call `db.Conn(ctx)` which returns the tx if present. The service never sees `*sql.Tx`.
 
+## Contracts & codegen (optional)
+
+`api/` + `gen/` at the module root. `buf` for protobuf and gRPC, `oapi-codegen` for OpenAPI; `buf breaking` and `oasdiff` in CI. Generated packages are imported only from `transport/**` and `<domain>/internal/{gateway,publisher}/**`; add `gen/**` as a `go-arch-lint` component with exactly those dependents. `go generate ./...` (or `make gen`) plus `git diff --exit-code` is the drift check. Remote peer adapters live under `<domain>/internal/gateway/<peer>rpc/`.
+
 ## Wiring
 
 Manual constructor injection. No DI framework needed. `wire`/`fx` are acceptable only inside `setup`/`app`.

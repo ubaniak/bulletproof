@@ -14,6 +14,7 @@ Every dependency rule must be checked by a tool in CI. Review alone does not hol
 | `<domain>/storage|gateway/*` adapters | `platform`, own domain |
 | `transport/<protocol>/<domain>` | `platform`, that domain's public API only |
 | `<domain>/setup` | `platform`, own domain, own adapters, other domains' public API |
+| `gen/` consumers (only if `gen/` exists) | `transport/<protocol>/<domain>` + `_dto`, `<domain>/gateway/*` + `_dto`, event publisher/consumer adapters; never `entities`, `service`, ports |
 | `app` | `platform`, `transport`, every domain's public API and `setup` |
 
 Plus a deny-list: `entities` and `service` may not depend on any IO library or web/ORM framework package, and no domain may depend on `transport`.

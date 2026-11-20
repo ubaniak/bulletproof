@@ -93,6 +93,10 @@ interface TxManager {
 ```
 Adapter implemented with Spring `TransactionTemplate` or jOOQ `transactionResult`. **No `@Transactional` on service** — the annotation couples business logic to Spring and hides boundaries.
 
+## Contracts & codegen (optional)
+
+`api/` at the repo root, generated sources in a separate `gen` module/source set. `openapi-generator` for OpenAPI, the protobuf Gradle/Maven plugin or `buf` for protobuf; `buf breaking` and `oasdiff` in CI. ArchUnit: no class in `..entities..`, `..service..`, or port packages may depend on `com.acme.gen..`. Drift check: regenerate and `git diff --exit-code`.
+
 ## Wiring
 
 Spring: `@Configuration` class per domain in `setup` (`@Bean fun timesheetService(...)`) building plain classes. Service classes carry **no** Spring annotations. Controllers (`@RestController`) are transport. Manual wiring or Koin works the same way.

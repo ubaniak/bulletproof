@@ -49,10 +49,16 @@ Restart Claude Code to pick up the new skill.
 - `rules/crosscutting.md` — decorators, middleware, observability, async transports (MEDIUM)
 - `rules/api.md` — neutral filters, pagination, error envelope, versioning, read models (MEDIUM)
 - `rules/standards.md` — boundary-lint dependency table (domains, transport, app), naming, tooling and CI gates (MEDIUM)
+- `rules/contracts.md` — optional: contract-first specs in `api/`, generated code in `gen/`, remote peers as gateways, events (MEDIUM)
+- `rules/manifest.md` — optional: `domain.yaml` and `bulletproof.yaml` manifests, scaffold outputs, hand-owned vs generated files (MEDIUM)
 - `rules/solid.md` — SOLID mapping and violation signs
 - `languages/*.md` — idiomatic layout, ports, errors, context, transactions, wiring, boundary-lint config, and framework traps for Go, TypeScript, Python, Java/Kotlin, and C#
 
 Rules in `rules/` are language-neutral (pseudocode). Claude detects the stack from `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`/`build.gradle`, or `*.csproj` and loads the matching language file. To add a language, copy an existing `languages/*.md`, answer the same sections, and add its marker to the table in `SKILL.md`.
+
+## Optional: contracts and manifests
+
+Teams that define OpenAPI/protobuf specs first and generate code can add `api/` (specs you edit) and `gen/` (generated, never edited). Generated types stay at the edge: only transports, gateways and event adapters import them, and entities are never generated from a wire spec. A peer that runs in another process is a gateway behind the consumer's own port. A `domain.yaml` per domain and a `bulletproof.yaml` per repo let a generator scaffold domains and wire processes (modular monolith, several processes, or one domain per binary). See `rules/contracts.md` and `rules/manifest.md`.
 
 ## Pattern summary
 

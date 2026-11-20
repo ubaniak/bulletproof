@@ -34,6 +34,8 @@ No match: apply the rules using the pseudocode in `rules/`, and name the closest
 | **translator** (`<impl>_dto`) | Converts between an adapter's native format (row, vendor payload, wire message) and entities/domain errors; a transport's sibling is `<domain>_dto` |
 | **transport** | Inbound adapters for one protocol (`transport/rest`, `transport/cmd`, `transport/grpc`, ...), one folder per domain: `transport/<protocol>/<domain>`. Lives beside `platform`, not inside a domain |
 | **service** | Business rules and orchestration; depends only on ports |
+| **contract** | A wire spec (OpenAPI, protobuf, event schema) in `api/`; `gen/` holds the code generated from it. Optional; see `rules/contracts.md` |
+| **manifest** | Hand-edited YAML (`<domain>/domain.yaml`, `bulletproof.yaml`) that a generator turns into scaffolding and wiring. Optional; see `rules/manifest.md` |
 | **setup** | Per-domain composition root: builds the domain's object graph |
 | **app** | Process composition root: builds platform, calls every setup, builds and mounts transports, owns lifecycle |
 | **platform** | Shared kernel of infrastructure primitives; depends on no domain |
@@ -112,6 +114,8 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 | 7 | Cross-cutting concerns | MEDIUM | `crosscutting-` |
 | 8 | Query & API design | MEDIUM | `api-` |
 | 9 | Standards & tooling | MEDIUM | `standards-` |
+| 10 | Contracts & generated code (optional) | MEDIUM | `contract-` |
+| 11 | Manifests & scaffolding (optional) | MEDIUM | `manifest-` |
 
 ### 1. Boundaries & structure (CRITICAL) — [rules/structure.md](rules/structure.md)
 - `structure-cross-domain-imports` — Domain A may depend only on B's `entities`, `errors`, `service` port.
@@ -176,11 +180,28 @@ Frameworks (Spring, NestJS, Express, Django, FastAPI, ASP.NET, Gin, ...) are ada
 - `standards-naming` — Concept names are fixed; casing follows the language file.
 - `standards-strict-tooling` — Formatter, linter, strict type checking, locked deps, pre-commit, CI gates.
 
+### 10. Contracts & generated code (MEDIUM, optional) — [rules/contracts.md](rules/contracts.md)
+Applies only when wire specs in `api/` are the source of truth and code is generated into `gen/`.
+- `contract-gen-edge-only` — Generated code is wire format: only transports, gateways, and event adapters import it, never entities, service, or ports.
+- `contract-entities-not-generated` — Entities are never generated from a wire spec; translators map between them.
+- `contract-generated-is-read-only` — `gen/` is never edited; CI regenerates and fails on drift.
+- `contract-remote-peer-is-gateway` — A peer in another process is a gateway behind the consumer's own port, not a service port.
+- `contract-events` — Event schemas are owned by the publisher; payload types stay at the edge.
+- `contract-breaking-change-check` — CI detects breaking spec changes; a break is a new version folder.
+
+### 11. Manifests & scaffolding (MEDIUM, optional) — [rules/manifest.md](rules/manifest.md)
+- `manifest-domain` — `<domain>/domain.yaml` describes ports, peers, events, and exposed protocols.
+- `manifest-process` — `bulletproof.yaml` says which domains and transports each process mounts.
+- `manifest-scaffold-outputs` — What a generator emits from the manifests.
+- `manifest-hand-owned-files` — Generated files are overwritten; hand-owned files are created once, never overwritten.
+- `manifest-generated-wiring` — Generated `app/` wiring contains only construction and registration.
+- `manifest-consistency-check` — CI fails when manifests and code disagree.
+
 SOLID mapping and violation signs: [rules/solid.md](rules/solid.md).
 
 ## Scaffold checklist
 
-When creating a new domain `X` (concrete file names and syntax from the language file):
+When creating a new domain `X` (concrete file names and syntax from the language file). If the repo has a `domain.yaml`/`bulletproof.yaml`, read the manifest first and run its generator; the steps below are what it must produce ([rules/manifest.md](rules/manifest.md)):
 
 1. `X/entities` — core types with constructor/factory-enforced invariants. Depends only on platform primitives.
 2. `X/errors` — the domain's errors (kind + stable code).
@@ -208,6 +229,12 @@ Flag:
 - `platform/` depending on a domain
 - Routes/middleware registered outside `app/`; service constructed in the entrypoint instead of `setup`
 - Cyclic dependency between domains; multi-purpose domain
+
+**Contracts** (only if the repo uses `api/` and `gen/`)
+- Generated types in entities, errors, service, or ports; hand-edited files under `gen/`
+- Entities generated from a wire spec
+- A remote peer injected as another domain's service port instead of a gateway
+- Spec change without a breaking-change check or without a new version folder when breaking
 
 **Layers**
 - Translator types in service signatures or entities

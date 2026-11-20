@@ -86,6 +86,10 @@ public interface ITxManager
 ```
 Adapter implemented with EF Core `Database.BeginTransactionAsync` or `TransactionScope`; `DbContext` lives only in storage adapters.
 
+## Contracts & codegen (optional)
+
+`api/` at the repo root, generated code in its own project (`Acme.Gen`). NSwag or Kiota for OpenAPI, `Grpc.Tools` for protobuf; `buf breaking` and `oasdiff` in CI. NetArchTest: `Acme.Gen` may be referenced only by `Acme.Transport` and the gateway/publisher adapter namespaces of each domain. Drift check: regenerate and `git diff --exit-code`.
+
 ## Wiring
 
 One `IServiceCollection` extension per domain in `Setup` (`services.AddTimesheet(config)`) registering adapters against ports. `Program.cs` (app) calls each extension and maps endpoints. Service classes never take `IServiceProvider`.

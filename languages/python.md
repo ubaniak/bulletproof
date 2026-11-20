@@ -150,6 +150,10 @@ async with self.tx.within_tx(ctx) as ctx:
 ```
 SQLAlchemy `Session`/`AsyncSession` lives only in the adapter, carried via ctx/contextvar.
 
+## Contracts & codegen (optional)
+
+`api/` + `gen/` at the repo root. `datamodel-code-generator` for OpenAPI models, `grpcio-tools` or `buf` for protobuf; `buf breaking` and `oasdiff` in CI. Add an `import-linter` contract forbidding `project.gen` imports from `entities`, `service`, and ports. Drift check: regenerate and `git diff --exit-code`.
+
 ## Wiring
 
 Manual construction in `setup.py`. `dependency-injector` or FastAPI `Depends` only in `setup`/`app`/transport — `Depends` never in service signatures.
